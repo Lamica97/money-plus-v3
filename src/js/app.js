@@ -64,6 +64,7 @@ const App = {
   charts: {},
 
   init: function() {
+    this.initTheme();
     this.loadData();
     this.setupDateDefaults();
     this.bindEvents();
@@ -1550,6 +1551,10 @@ const App = {
     const canvasTrend = document.getElementById('chart-monthly-trend');
     if (canvasTrend) {
       if (this.charts.trend) this.charts.trend.destroy();
+      const isDark = document.documentElement.classList.contains('dark');
+      const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
+      const textColor = isDark ? '#a1a1aa' : '#64748b';
+
       this.charts.trend = new Chart(canvasTrend, {
         type: 'bar',
         data: {
@@ -1558,7 +1563,7 @@ const App = {
             {
               label: 'ปี 2025',
               data: monthly2025,
-              backgroundColor: '#cbd5e1',
+              backgroundColor: isDark ? '#27272a' : '#cbd5e1',
               borderRadius: 4
             },
             {
@@ -1573,7 +1578,13 @@ const App = {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'top' },
+            legend: {
+              position: 'top',
+              labels: {
+                color: isDark ? '#e4e4e7' : '#334155',
+                font: { family: "'Prompt', sans-serif" }
+              }
+            },
             tooltip: {
               callbacks: {
                 label: (ctx) => `${ctx.dataset.label}: ฿${ctx.raw.toLocaleString()}`
@@ -1581,9 +1592,19 @@ const App = {
             }
           },
           scales: {
+            x: {
+              grid: { color: gridColor },
+              ticks: {
+                color: textColor,
+                font: { family: "'Prompt', sans-serif" }
+              }
+            },
             y: {
               beginAtZero: true,
+              grid: { color: gridColor },
               ticks: {
+                color: textColor,
+                font: { family: "'Prompt', sans-serif" },
                 callback: (val) => '฿' + (val >= 1000 ? (val/1000) + 'k' : val)
               }
             }
@@ -2693,6 +2714,50 @@ const App = {
   closePwaInstallModal: function() {
     const modal = document.getElementById('pwa-install-modal');
     if (modal) modal.classList.add('hidden');
+  },
+
+  // ----------------- 🌙 THEME MANAGEMENT (MIDNIGHT OLED) -----------------
+  initTheme: function() {
+    const saved = localStorage.getItem('money_plus_theme');
+    if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    this.updateThemeUI();
+  },
+
+  toggleTheme: function() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('money_plus_theme', isDark ? 'dark' : 'light');
+    this.updateThemeUI();
+    if (this.charts && this.charts.trend) {
+      this.renderCharts();
+    }
+    this.showToast(isDark ? 'เปิดใช้งาน Dark Mode 🌙 (Midnight OLED)' : 'สลับเป็น Light Mode ☀️ เรียบร้อย', 'info');
+  },
+
+  updateThemeUI: function() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const icon = document.getElementById('theme-toggle-icon');
+    if (icon) {
+      icon.textContent = isDark ? '☀️' : '🌙';
+    }
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) {
+      btn.title = isDark ? 'คลิกเพื่อสลับเป็นโหมดสว่าง (Light Mode)' : 'คลิกเพื่อสลับเป็นโหมดมืด (Dark Mode)';
+      if (isDark) {
+        btn.classList.add('text-amber-400', 'bg-zinc-800', 'border-zinc-700');
+        btn.classList.remove('text-slate-700', 'bg-slate-100', 'border-slate-200');
+      } else {
+        btn.classList.remove('text-amber-400', 'bg-zinc-800', 'border-zinc-700');
+        btn.classList.add('text-slate-700', 'bg-slate-100', 'border-slate-200');
+      }
+    }
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.setAttribute('content', isDark ? '#09090b' : '#059669');
+    }
   }
 };
 

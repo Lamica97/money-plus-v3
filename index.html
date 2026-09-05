@@ -20,6 +20,24 @@
   <meta name="mobile-web-app-capable" content="yes">
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    };
+  </script>
+  <!-- Instant Theme Detector (Prevents theme flashing) -->
+  <script>
+    (function() {
+      try {
+        const saved = localStorage.getItem('money_plus_theme');
+        if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch(e) {}
+    })();
+  </script>
   <!-- Google Fonts: Prompt -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,9 +56,194 @@
     ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 9999px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* ==================== MIDNIGHT OLED DARK MODE (REFINED SUBTLE GLOW) ==================== */
+    html.dark {
+      color-scheme: dark;
+    }
+    html.dark body {
+      background-color: #09090b !important;
+      color: #f4f4f5 !important;
+    }
+    /* Surfaces: Header, Cards, Panels, Dropdowns, Modals */
+    html.dark header,
+    html.dark .bg-white {
+      background-color: #121214 !important;
+      border-color: #27272a !important;
+    }
+    html.dark .bg-white\/70,
+    html.dark .bg-white\/80,
+    html.dark .bg-white\/90,
+    html.dark .bg-white\/95 {
+      background-color: #141417 !important;
+      border-color: #27272a !important;
+    }
+    html.dark .bg-slate-50 {
+      background-color: #09090b !important;
+    }
+    html.dark .bg-slate-100 {
+      background-color: #1c1c20 !important;
+      color: #e4e4e7 !important;
+      border-color: #27272a !important;
+    }
+    html.dark .bg-slate-200 {
+      background-color: #27272a !important;
+      color: #e4e4e7 !important;
+    }
+    html.dark .hover\:bg-slate-50:hover {
+      background-color: #18181b !important;
+    }
+    html.dark .hover\:bg-slate-100:hover {
+      background-color: #242428 !important;
+    }
+    html.dark .hover\:bg-slate-200:hover {
+      background-color: #2e2e33 !important;
+    }
+
+    /* Borders & Dividers */
+    html.dark .border-slate-200,
+    html.dark .border-slate-100,
+    html.dark .border-slate-300,
+    html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+    html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+      border-color: #27272a !important;
+    }
+
+    /* Typography */
+    html.dark .text-slate-900,
+    html.dark .text-slate-800 {
+      color: #fafafa !important;
+    }
+    html.dark .text-slate-700,
+    html.dark .text-slate-600 {
+      color: #d4d4d8 !important;
+    }
+    html.dark .text-slate-500,
+    html.dark .text-slate-400 {
+      color: #a1a1aa !important;
+    }
+
+    /* Form Inputs, Selects & Date Pickers */
+    html.dark input,
+    html.dark select,
+    html.dark textarea {
+      background-color: #18181b !important;
+      color: #f4f4f5 !important;
+      border-color: #27272a !important;
+    }
+    html.dark input:focus,
+    html.dark select:focus,
+    html.dark textarea:focus {
+      border-color: #10b981 !important;
+      box-shadow: 0 0 0 1px #10b981, 0 0 8px rgba(16, 185, 129, 0.2) !important;
+    }
+
+    /* Quick Record Attendance Header Banner in Dark Mode */
+    html.dark .from-emerald-600.to-teal-700 {
+      background: linear-gradient(135deg, #063c2e 0%, #082921 100%) !important;
+      border: 1px solid rgba(16, 185, 129, 0.28) !important;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.08) !important;
+    }
+    html.dark #banner-group-controls {
+      background-color: #121214 !important;
+      border-color: rgba(16, 185, 129, 0.25) !important;
+      color: #f4f4f5 !important;
+    }
+    html.dark #banner-group-controls label {
+      color: #d4d4d8 !important;
+    }
+
+    /* Subtle Glowing Accent Buttons (Minimal & Refined) */
+    html.dark .bg-emerald-600 {
+      background-color: #059669 !important;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.22) !important;
+    }
+    html.dark .hover\:bg-emerald-700:hover {
+      background-color: #10b981 !important;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.35) !important;
+    }
+    html.dark .border-emerald-500 {
+      border-color: #10b981 !important;
+    }
+    html.dark .text-emerald-600,
+    html.dark .text-emerald-700 {
+      color: #34d399 !important;
+    }
+    html.dark .bg-emerald-100 {
+      background-color: rgba(6, 78, 59, 0.65) !important;
+      border: 1px solid rgba(16, 185, 129, 0.3) !important;
+    }
+    html.dark .text-emerald-800 {
+      color: #6ee7b7 !important;
+    }
+
+    /* Student Cards & Badges in Dark Mode */
+    html.dark .border-emerald-300 {
+      border-color: rgba(16, 185, 129, 0.38) !important;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.1) !important;
+    }
+    html.dark .border-amber-300 {
+      border-color: rgba(245, 158, 11, 0.38) !important;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.1) !important;
+    }
+    html.dark .bg-amber-100 {
+      background-color: rgba(120, 53, 15, 0.65) !important;
+      border: 1px solid rgba(245, 158, 11, 0.3) !important;
+    }
+    html.dark .text-amber-800 {
+      color: #fcd34d !important;
+    }
+    html.dark .bg-blue-100 {
+      background-color: rgba(30, 58, 138, 0.65) !important;
+      border: 1px solid rgba(59, 130, 246, 0.3) !important;
+    }
+    html.dark .text-blue-800 {
+      color: #93c5fd !important;
+    }
+    html.dark .bg-purple-100 {
+      background-color: rgba(88, 28, 135, 0.65) !important;
+      border: 1px solid rgba(168, 85, 247, 0.3) !important;
+    }
+    html.dark .text-purple-800 {
+      color: #d8b4fe !important;
+    }
+
+    /* Mobile Bottom Navigation in Dark Mode */
+    html.dark nav.md\:hidden {
+      background-color: rgba(18, 18, 20, 0.96) !important;
+      border-color: #27272a !important;
+    }
+
+    /* Modals & Dialogs */
+    html.dark #pwa-install-modal > div,
+    html.dark #cloud-status-modal > div,
+    html.dark #payment-method-modal > div,
+    html.dark #edit-tx-modal > div,
+    html.dark #confirm-dialog-modal > div,
+    html.dark #add-student-modal > div,
+    html.dark #group-mgmt-modal > div,
+    html.dark #unpaid-slip-modal > div,
+    html.dark #extra-student-modal > div,
+    html.dark #day-detail-modal > div,
+    html.dark #slip-modal > div {
+      background-color: #121214 !important;
+      border-color: #27272a !important;
+      color: #f4f4f5 !important;
+    }
+
+    /* Scrollbars in Dark Mode */
+    html.dark ::-webkit-scrollbar-track {
+      background: #09090b;
+    }
+    html.dark ::-webkit-scrollbar-thumb {
+      background: #27272a;
+    }
+    html.dark ::-webkit-scrollbar-thumb:hover {
+      background: #3f3f46;
+    }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- ==================== TOP NAVIGATION BAR ==================== -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
@@ -103,6 +306,11 @@
           <!-- PWA Install App Button -->
           <button id="pwa-install-btn" onclick="triggerPWAInstall()" title="ดาวน์โหลด/ติดตั้งเป็นแอปบนหน้าจอ (iPad / สมาร์ทโฟน)" class="px-2.5 sm:px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg shadow-sm flex items-center gap-1 transition whitespace-nowrap flex-shrink-0">
             📲 <span class="hidden md:inline">ติดตั้งแอป</span>
+          </button>
+
+          <!-- Theme Toggle Button (Light / Midnight OLED Dark Mode) -->
+          <button id="theme-toggle-btn" onclick="App.toggleTheme()" title="สลับโหมดสว่าง / โหมดมืด (Dark Mode)" class="p-1.5 sm:p-2 text-xs sm:text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg flex items-center justify-center transition shadow-sm whitespace-nowrap flex-shrink-0">
+            <span id="theme-toggle-icon">🌙</span>
           </button>
 
           <button onclick="App.resetData()" title="รีเซ็ตข้อมูลเป็นค่าเริ่มต้น" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-100 rounded-lg transition text-xs whitespace-nowrap flex-shrink-0">
