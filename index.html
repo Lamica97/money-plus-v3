@@ -1283,13 +1283,16 @@
 
       <!-- Canvas & Responsive Image Preview Area (iPad & Mobile Optimized) -->
       <div class="bg-slate-100 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 flex flex-col items-center justify-center border border-slate-200 dark:border-zinc-800 w-full overflow-hidden">
-        <div class="max-h-[54vh] overflow-y-auto w-full flex justify-center rounded-xl bg-white dark:bg-zinc-950 p-1.5 shadow-sm">
-          <img id="slip-preview-img" class="w-auto max-w-full h-auto rounded-lg block shadow-sm select-none" style="max-height: 52vh; object-fit: contain;" alt="รูปภาพใบแจ้งยอด">
+        <div class="max-h-[54vh] overflow-y-auto w-full flex justify-center items-center rounded-xl bg-white dark:bg-zinc-950 p-1.5 shadow-sm">
+          <img id="slip-preview-img" class="w-auto max-w-full h-auto rounded-lg block shadow-sm select-none" style="max-height: 52vh; max-width: 370px; width: 100%; object-fit: contain;" alt="รูปภาพใบแจ้งยอด">
           <canvas id="slip-canvas" class="hidden"></canvas>
         </div>
-        <p class="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 mt-2 text-center select-none">
-          💡 บน iPad / iPhone: แตะปุ่ม <strong>"บันทึกรูปภาพ / แชร์"</strong> หรือ<strong>แตะค้างที่รูปภาพ</strong> แล้วเลือก "บันทึกภาพ"
-        </p>
+        <div class="flex items-center justify-between w-full mt-2 px-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 select-none">
+          <span>💡 แตะปุ่มด้านล่างเพื่อแชร์/ส่ง LINE หรือแตะค้างที่รูปภาพ</span>
+          <button type="button" onclick="App.forceRefreshApp()" class="text-emerald-600 dark:text-emerald-400 hover:underline ml-2 whitespace-nowrap font-medium" title="กดหากภาพยังไม่อัปเดต">
+            🔄 อัปเดตแอป
+          </button>
+        </div>
       </div>
 
       <!-- Action Buttons -->
@@ -1513,10 +1516,10 @@
   <!-- Scripts -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-  <script src="src/js/firebase.js?v=20260905_v8"></script>
-  <script src="src/data/initialData.js?v=20260905_v8"></script>
-  <script src="src/js/excel.js?v=20260905_v8"></script>
-  <script src="src/js/app.js?v=20260905_v8"></script>
+  <script src="src/js/firebase.js?v=20260905_v14"></script>
+  <script src="src/data/initialData.js?v=20260905_v14"></script>
+  <script src="src/js/excel.js?v=20260905_v14"></script>
+  <script src="src/js/app.js?v=20260905_v14"></script>
 
   <!-- PWA Service Worker & Install Script -->
   <script>
@@ -1557,7 +1560,7 @@
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20260905_v8')
+        navigator.serviceWorker.register('./sw.js?v=20260905_v14')
           .then((reg) => {
             console.log('Service Worker registered with scope:', reg.scope);
             try {
@@ -1569,6 +1572,14 @@
           .catch((err) => {
             console.warn('Service Worker registration failed:', err);
           });
+      });
+
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
       });
     }
   </script>

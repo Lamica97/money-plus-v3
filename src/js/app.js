@@ -1875,12 +1875,13 @@ const App = {
     const txs = st.transactions || [];
     const scale = 2; // Retina sharpness
 
-    const width = 450;
-    const paddingX = 16;
-    const innerWidth = width - (paddingX * 2); // 418
-    const rowHeight = 28;
-    const tableHeight = 32 + (txs.length * rowHeight);
-    const height = 115 + 85 + tableHeight + 64 + 48 + 15;
+    // Compact 370px card width: eliminates huge gap and fits completely inside any iPad/mobile screen without clipping
+    const width = 370;
+    const paddingX = 14;
+    const innerWidth = width - (paddingX * 2); // 342
+    const rowHeight = 27;
+    const tableHeight = 30 + (txs.length * rowHeight);
+    const height = 105 + 78 + tableHeight + 56 + 46 + 12;
 
     canvas.width = width * scale;
     canvas.height = height * scale;
@@ -1915,7 +1916,7 @@ const App = {
     roundRect(0, 0, width, height, 16, true, true, '#cbd5e1', '#ffffff');
 
     // 2. Header Banner with Emerald Gradient
-    const headerGrad = ctx.createLinearGradient(0, 0, width, 110);
+    const headerGrad = ctx.createLinearGradient(0, 0, width, 100);
     headerGrad.addColorStop(0, '#065f46');
     headerGrad.addColorStop(1, '#0f766e');
 
@@ -1924,8 +1925,8 @@ const App = {
     ctx.moveTo(16, 0);
     ctx.lineTo(width - 16, 0);
     ctx.quadraticCurveTo(width, 0, width, 16);
-    ctx.lineTo(width, 105);
-    ctx.lineTo(0, 105);
+    ctx.lineTo(width, 95);
+    ctx.lineTo(0, 95);
     ctx.lineTo(0, 16);
     ctx.quadraticCurveTo(0, 0, 16, 0);
     ctx.closePath();
@@ -1934,70 +1935,70 @@ const App = {
     ctx.restore();
 
     // Header Logo Icon
-    roundRect(20, 20, 42, 42, 10, true, false, null, '#ffffff');
+    roundRect(16, 16, 38, 38, 9, true, false, null, '#ffffff');
     ctx.fillStyle = '#059669';
-    ctx.font = 'bold 18px "Prompt", sans-serif';
+    ctx.font = 'bold 17px "Prompt", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('M+', 41, 41);
+    ctx.fillText('M+', 35, 35);
 
     // Header Titles
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = '#a7f3d0';
-    ctx.font = '500 11px "Prompt", sans-serif';
-    ctx.fillText('MONEY PLUS ACADEMY', 72, 33);
+    ctx.font = '500 10.5px "Prompt", sans-serif';
+    ctx.fillText('MONEY PLUS ACADEMY', 62, 30);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 18px "Prompt", sans-serif';
-    ctx.fillText('ใบแจ้งยอดค้างชำระค่าเรียน', 72, 56);
+    ctx.font = 'bold 16.5px "Prompt", sans-serif';
+    ctx.fillText('ใบแจ้งยอดค้างชำระค่าเรียน', 62, 51);
 
     const now = new Date();
     const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
     const dateStr = `วันที่ออกเอกสาร: ${now.getDate()} ${thaiMonths[now.getMonth()]} ${now.getFullYear() + 543}`;
     ctx.fillStyle = '#d1fae5';
-    ctx.font = '400 11px "Prompt", sans-serif';
-    ctx.fillText(dateStr, 72, 74);
+    ctx.font = '400 10px "Prompt", sans-serif';
+    ctx.fillText(dateStr, 62, 69);
 
-    let curY = 120;
+    let curY = 108;
 
     // 3. Student Information Card
-    roundRect(paddingX, curY, innerWidth, 72, 12, true, true, '#e2e8f0', '#f8fafc');
+    roundRect(paddingX, curY, innerWidth, 68, 10, true, true, '#e2e8f0', '#f8fafc');
 
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 16px "Prompt", sans-serif';
-    ctx.fillText(`นักเรียน: ${st.name}`, paddingX + 14, curY + 28);
+    ctx.font = 'bold 15px "Prompt", sans-serif';
+    ctx.fillText(`นักเรียน: ${st.name}`, paddingX + 12, curY + 26);
 
     // Grade Tag
-    const gradeTagW = 74;
-    const gradeTagX = width - paddingX - 12 - gradeTagW;
-    roundRect(gradeTagX, curY + 12, gradeTagW, 22, 6, true, true, '#bbf7d0', '#f0fdf4');
+    const gradeTagW = 66;
+    const gradeTagX = width - paddingX - 10 - gradeTagW;
+    roundRect(gradeTagX, curY + 11, gradeTagW, 21, 6, true, true, '#bbf7d0', '#f0fdf4');
     ctx.fillStyle = '#166534';
-    ctx.font = 'bold 11px "Prompt", sans-serif';
+    ctx.font = 'bold 10.5px "Prompt", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`ชั้น: ${st.grade || '-'}`, gradeTagX + (gradeTagW / 2), curY + 27);
+    ctx.fillText(`ชั้น: ${st.grade || '-'}`, gradeTagX + (gradeTagW / 2), curY + 25);
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#64748b';
-    ctx.font = '400 12px "Prompt", sans-serif';
-    ctx.fillText(`กลุ่มเรียน: ${st.group || '-'}`, paddingX + 14, curY + 52);
+    ctx.font = '400 11.5px "Prompt", sans-serif';
+    ctx.fillText(`กลุ่มเรียน: ${st.group || '-'}`, paddingX + 12, curY + 50);
 
     ctx.fillStyle = '#b45309';
-    ctx.font = 'bold 12px "Prompt", sans-serif';
-    ctx.fillText(`⚠️ ค้างชำระ: ${txs.length} คาบ`, paddingX + 155, curY + 52);
+    ctx.font = 'bold 11.5px "Prompt", sans-serif';
+    ctx.fillText(`⚠️ ค้างชำระ: ${txs.length} คาบ`, paddingX + 145, curY + 50);
 
-    curY += 84;
+    curY += 78;
 
     // 4. Breakdown Table
     // Table Header
     roundRect(paddingX, curY, innerWidth, 26, 6, true, false, null, '#f1f5f9');
     ctx.fillStyle = '#475569';
-    ctx.font = 'bold 11px "Prompt", sans-serif';
-    ctx.fillText('#', paddingX + 12, curY + 17);
-    ctx.fillText('วันที่เรียน', paddingX + 38, curY + 17);
-    ctx.fillText('รอบ / กลุ่ม', paddingX + 155, curY + 17);
+    ctx.font = 'bold 10.5px "Prompt", sans-serif';
+    ctx.fillText('#', paddingX + 10, curY + 17);
+    ctx.fillText('วันที่เรียน', paddingX + 32, curY + 17);
+    ctx.fillText('รอบ / กลุ่ม', paddingX + 135, curY + 17);
     ctx.textAlign = 'right';
-    ctx.fillText('จำนวนเงิน', width - paddingX - 14, curY + 17);
+    ctx.fillText('จำนวนเงิน', width - paddingX - 12, curY + 17);
     ctx.textAlign = 'left';
 
     curY += 28;
@@ -2010,21 +2011,21 @@ const App = {
       }
 
       ctx.fillStyle = '#94a3b8';
-      ctx.font = '10.5px "Prompt", sans-serif';
-      ctx.fillText(String(idx + 1), paddingX + 12, curY + 17);
+      ctx.font = '10px "Prompt", sans-serif';
+      ctx.fillText(String(idx + 1), paddingX + 10, curY + 17);
 
       ctx.fillStyle = '#1e293b';
       ctx.font = '500 11px "Prompt", sans-serif';
-      ctx.fillText(tx.date || '-', paddingX + 38, curY + 17);
+      ctx.fillText(tx.date || '-', paddingX + 32, curY + 17);
 
       ctx.fillStyle = '#475569';
       ctx.font = '400 11px "Prompt", sans-serif';
-      ctx.fillText(tx.group || '-', paddingX + 155, curY + 17);
+      ctx.fillText(tx.group || '-', paddingX + 135, curY + 17);
 
       ctx.textAlign = 'right';
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 11.5px "Prompt", sans-serif';
-      ctx.fillText(`฿${(Number(tx.amount) || 0).toLocaleString()}`, width - paddingX - 14, curY + 17);
+      ctx.fillText(`฿${(Number(tx.amount) || 0).toLocaleString()}`, width - paddingX - 12, curY + 17);
       ctx.textAlign = 'left';
 
       curY += rowHeight;
@@ -2033,28 +2034,28 @@ const App = {
     curY += 8;
 
     // 5. Total Amount Due Box
-    roundRect(paddingX, curY, innerWidth, 54, 12, true, true, '#a7f3d0', '#ecfdf5');
+    roundRect(paddingX, curY, innerWidth, 50, 10, true, true, '#a7f3d0', '#ecfdf5');
     ctx.fillStyle = '#065f46';
-    ctx.font = 'bold 13px "Prompt", sans-serif';
-    ctx.fillText('ยอดรวมที่ต้องชำระทั้งสิ้น', paddingX + 16, curY + 32);
+    ctx.font = 'bold 12px "Prompt", sans-serif';
+    ctx.fillText('ยอดรวมที่ต้องชำระทั้งสิ้น', paddingX + 14, curY + 30);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#047857';
-    ctx.font = '900 19px "Prompt", sans-serif';
-    ctx.fillText(`฿${st.totalAmount.toLocaleString()}`, width - paddingX - 14, curY + 34);
+    ctx.font = '900 18px "Prompt", sans-serif';
+    ctx.fillText(`฿${st.totalAmount.toLocaleString()}`, width - paddingX - 12, curY + 32);
     ctx.textAlign = 'left';
 
-    curY += 62;
+    curY += 58;
 
     // 6. Footer Notice
     ctx.textAlign = 'center';
     ctx.fillStyle = '#64748b';
-    ctx.font = '400 11px "Prompt", sans-serif';
+    ctx.font = '400 10.5px "Prompt", sans-serif';
     ctx.fillText('ขอบพระคุณครับ/ค่ะ 🙏', width / 2, curY + 14);
 
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '400 9.5px "Prompt", sans-serif';
-    ctx.fillText('ระบบบันทึกการสอน Money Plus v.3', width / 2, curY + 30);
+    ctx.font = '400 9px "Prompt", sans-serif';
+    ctx.fillText('ระบบบันทึกการสอน Money Plus v.3', width / 2, curY + 28);
 
     // Generate responsive preview img and pre-cache Blob & File
     const previewImg = document.getElementById('slip-preview-img');
@@ -2896,6 +2897,26 @@ const App = {
     const metaTheme = document.querySelector('meta[name="theme-color"]');
     if (metaTheme) {
       metaTheme.setAttribute('content', isDark ? '#09090b' : '#059669');
+    }
+  },
+
+  forceRefreshApp: function() {
+    this.showToast('กำลังล้างแคชและโหลดเวอร์ชันล่าสุด...', 'info');
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let reg of registrations) {
+          reg.unregister();
+        }
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        Promise.all(names.map(name => caches.delete(name))).then(() => {
+          window.location.reload(true);
+        });
+      });
+    } else {
+      window.location.reload(true);
     }
   }
 };
