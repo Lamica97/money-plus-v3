@@ -1283,22 +1283,22 @@
 
       <!-- Canvas & Responsive Image Preview Area (iPad & Mobile Optimized) -->
       <div class="bg-slate-100 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 flex flex-col items-center justify-center border border-slate-200 dark:border-zinc-800 w-full overflow-hidden">
-        <div class="max-h-[54vh] overflow-y-auto w-full flex justify-center rounded-xl bg-white p-1 shadow-sm">
-          <img id="slip-preview-img" class="w-full h-auto rounded-lg block max-w-[460px] shadow-sm select-none" alt="รูปภาพใบแจ้งยอด">
+        <div class="max-h-[54vh] overflow-y-auto w-full flex justify-center rounded-xl bg-white dark:bg-zinc-950 p-1.5 shadow-sm">
+          <img id="slip-preview-img" class="w-auto max-w-full h-auto rounded-lg block shadow-sm select-none" style="max-height: 52vh; object-fit: contain;" alt="รูปภาพใบแจ้งยอด">
           <canvas id="slip-canvas" class="hidden"></canvas>
         </div>
         <p class="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 mt-2 text-center select-none">
-          💡 บน iPad / iPhone: สามารถ<strong>แตะค้างที่รูปภาพ</strong>เพื่อบันทึกลงอัลบั้ม หรือกดปุ่มด้านล่างเพื่อส่งต่อ/ดาวน์โหลด
+          💡 บน iPad / iPhone: แตะปุ่ม <strong>"บันทึกรูปภาพ / แชร์"</strong> หรือ<strong>แตะค้างที่รูปภาพ</strong> แล้วเลือก "บันทึกภาพ"
         </p>
       </div>
 
       <!-- Action Buttons -->
       <div class="space-y-2.5 pt-1">
         <div class="grid grid-cols-2 gap-2">
-          <button type="button" onclick="App.downloadSlipImage()" class="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-200 transition flex items-center justify-center gap-1.5">
-            <span>📥</span> ดาวน์โหลดรูปภาพ (PNG)
+          <button type="button" onclick="App.downloadSlipImage()" class="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-200 transition flex items-center justify-center gap-1.5 active:scale-95">
+            <span>📥</span> บันทึกรูปภาพ / แชร์
           </button>
-          <button type="button" onclick="App.copySlipImage()" class="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-200 transition flex items-center justify-center gap-1.5">
+          <button type="button" onclick="App.copySlipImage()" class="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-200 transition flex items-center justify-center gap-1.5 active:scale-95">
             <span>📋</span> คัดลอกรูป (ส่ง LINE)
           </button>
         </div>
@@ -1513,10 +1513,10 @@
   <!-- Scripts -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-  <script src="src/js/firebase.js"></script>
-  <script src="src/data/initialData.js"></script>
-  <script src="src/js/excel.js"></script>
-  <script src="src/js/app.js"></script>
+  <script src="src/js/firebase.js?v=20260905_v8"></script>
+  <script src="src/data/initialData.js?v=20260905_v8"></script>
+  <script src="src/js/excel.js?v=20260905_v8"></script>
+  <script src="src/js/app.js?v=20260905_v8"></script>
 
   <!-- PWA Service Worker & Install Script -->
   <script>
@@ -1557,9 +1557,14 @@
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
+        navigator.serviceWorker.register('./sw.js?v=20260905_v8')
           .then((reg) => {
             console.log('Service Worker registered with scope:', reg.scope);
+            try {
+              reg.update();
+            } catch (e) {
+              console.warn('SW update check error', e);
+            }
           })
           .catch((err) => {
             console.warn('Service Worker registration failed:', err);

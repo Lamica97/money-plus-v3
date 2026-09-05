@@ -1853,6 +1853,10 @@ const App = {
       return;
     }
 
+    this.state.currentSlipBlob = null;
+    this.state.currentSlipFile = null;
+    this.state.currentSlipDataUrl = null;
+
     this.generateSlipCanvas(st);
     const modal = document.getElementById('slip-modal');
     if (modal) modal.classList.remove('hidden');
@@ -1868,14 +1872,15 @@ const App = {
     const canvas = document.getElementById('slip-canvas');
     if (!canvas) return;
 
-    const settings = this.state.paymentSettings || {};
     const txs = st.transactions || [];
     const scale = 2; // Retina sharpness
 
-    const width = 500;
+    const width = 450;
+    const paddingX = 16;
+    const innerWidth = width - (paddingX * 2); // 418
     const rowHeight = 28;
     const tableHeight = 32 + (txs.length * rowHeight);
-    const height = 115 + 85 + tableHeight + 62 + 48 + 15;
+    const height = 115 + 85 + tableHeight + 64 + 48 + 15;
 
     canvas.width = width * scale;
     canvas.height = height * scale;
@@ -1907,7 +1912,7 @@ const App = {
     }
 
     // 1. Base card background
-    roundRect(0, 0, width, height, 18, true, true, '#cbd5e1', '#ffffff');
+    roundRect(0, 0, width, height, 16, true, true, '#cbd5e1', '#ffffff');
 
     // 2. Header Banner with Emerald Gradient
     const headerGrad = ctx.createLinearGradient(0, 0, width, 110);
@@ -1916,25 +1921,25 @@ const App = {
 
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(18, 0);
-    ctx.lineTo(width - 18, 0);
-    ctx.quadraticCurveTo(width, 0, width, 18);
+    ctx.moveTo(16, 0);
+    ctx.lineTo(width - 16, 0);
+    ctx.quadraticCurveTo(width, 0, width, 16);
     ctx.lineTo(width, 105);
     ctx.lineTo(0, 105);
-    ctx.lineTo(0, 18);
-    ctx.quadraticCurveTo(0, 0, 18, 0);
+    ctx.lineTo(0, 16);
+    ctx.quadraticCurveTo(0, 0, 16, 0);
     ctx.closePath();
     ctx.fillStyle = headerGrad;
     ctx.fill();
     ctx.restore();
 
     // Header Logo Icon
-    roundRect(22, 20, 40, 40, 10, true, false, null, '#ffffff');
+    roundRect(20, 20, 42, 42, 10, true, false, null, '#ffffff');
     ctx.fillStyle = '#059669';
     ctx.font = 'bold 18px "Prompt", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('M+', 42, 40);
+    ctx.fillText('M+', 41, 41);
 
     // Header Titles
     ctx.textAlign = 'left';
@@ -1944,7 +1949,7 @@ const App = {
     ctx.fillText('MONEY PLUS ACADEMY', 72, 33);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 19px "Prompt", sans-serif';
+    ctx.font = 'bold 18px "Prompt", sans-serif';
     ctx.fillText('ใบแจ้งยอดค้างชำระค่าเรียน', 72, 56);
 
     const now = new Date();
@@ -1952,45 +1957,47 @@ const App = {
     const dateStr = `วันที่ออกเอกสาร: ${now.getDate()} ${thaiMonths[now.getMonth()]} ${now.getFullYear() + 543}`;
     ctx.fillStyle = '#d1fae5';
     ctx.font = '400 11px "Prompt", sans-serif';
-    ctx.fillText(dateStr, 72, 73);
+    ctx.fillText(dateStr, 72, 74);
 
     let curY = 120;
 
     // 3. Student Information Card
-    roundRect(18, curY, width - 36, 72, 12, true, true, '#e2e8f0', '#f8fafc');
+    roundRect(paddingX, curY, innerWidth, 72, 12, true, true, '#e2e8f0', '#f8fafc');
 
     ctx.fillStyle = '#0f172a';
     ctx.font = 'bold 16px "Prompt", sans-serif';
-    ctx.fillText(`นักเรียน: ${st.name}`, 32, curY + 28);
+    ctx.fillText(`นักเรียน: ${st.name}`, paddingX + 14, curY + 28);
 
     // Grade Tag
-    roundRect(width - 110, curY + 12, 78, 22, 6, true, true, '#bbf7d0', '#f0fdf4');
+    const gradeTagW = 74;
+    const gradeTagX = width - paddingX - 12 - gradeTagW;
+    roundRect(gradeTagX, curY + 12, gradeTagW, 22, 6, true, true, '#bbf7d0', '#f0fdf4');
     ctx.fillStyle = '#166534';
     ctx.font = 'bold 11px "Prompt", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`ชั้น: ${st.grade || '-'}`, width - 71, curY + 27);
+    ctx.fillText(`ชั้น: ${st.grade || '-'}`, gradeTagX + (gradeTagW / 2), curY + 27);
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#64748b';
     ctx.font = '400 12px "Prompt", sans-serif';
-    ctx.fillText(`กลุ่มเรียน: ${st.group || '-'}`, 32, curY + 52);
+    ctx.fillText(`กลุ่มเรียน: ${st.group || '-'}`, paddingX + 14, curY + 52);
 
     ctx.fillStyle = '#b45309';
     ctx.font = 'bold 12px "Prompt", sans-serif';
-    ctx.fillText(`⚠️ ค้างชำระทั้งหมด: ${txs.length} คาบ`, 180, curY + 52);
+    ctx.fillText(`⚠️ ค้างชำระ: ${txs.length} คาบ`, paddingX + 155, curY + 52);
 
     curY += 84;
 
     // 4. Breakdown Table
     // Table Header
-    roundRect(18, curY, width - 36, 26, 6, true, false, null, '#f1f5f9');
+    roundRect(paddingX, curY, innerWidth, 26, 6, true, false, null, '#f1f5f9');
     ctx.fillStyle = '#475569';
     ctx.font = 'bold 11px "Prompt", sans-serif';
-    ctx.fillText('#', 30, curY + 17);
-    ctx.fillText('วันที่เรียน', 65, curY + 17);
-    ctx.fillText('รอบ / กลุ่ม', 210, curY + 17);
+    ctx.fillText('#', paddingX + 12, curY + 17);
+    ctx.fillText('วันที่เรียน', paddingX + 38, curY + 17);
+    ctx.fillText('รอบ / กลุ่ม', paddingX + 155, curY + 17);
     ctx.textAlign = 'right';
-    ctx.fillText('จำนวนเงิน', width - 30, curY + 17);
+    ctx.fillText('จำนวนเงิน', width - paddingX - 14, curY + 17);
     ctx.textAlign = 'left';
 
     curY += 28;
@@ -1999,25 +2006,25 @@ const App = {
     txs.forEach((tx, idx) => {
       const isEven = idx % 2 === 0;
       if (isEven) {
-        roundRect(18, curY, width - 36, rowHeight - 2, 4, true, false, null, '#fafafa');
+        roundRect(paddingX, curY, innerWidth, rowHeight - 2, 4, true, false, null, '#fafafa');
       }
 
       ctx.fillStyle = '#94a3b8';
       ctx.font = '10.5px "Prompt", sans-serif';
-      ctx.fillText(String(idx + 1), 30, curY + 17);
+      ctx.fillText(String(idx + 1), paddingX + 12, curY + 17);
 
       ctx.fillStyle = '#1e293b';
-      ctx.font = '500 11.5px "Prompt", sans-serif';
-      ctx.fillText(tx.date || '-', 65, curY + 17);
+      ctx.font = '500 11px "Prompt", sans-serif';
+      ctx.fillText(tx.date || '-', paddingX + 38, curY + 17);
 
       ctx.fillStyle = '#475569';
-      ctx.font = '400 11.5px "Prompt", sans-serif';
-      ctx.fillText(tx.group || '-', 210, curY + 17);
+      ctx.font = '400 11px "Prompt", sans-serif';
+      ctx.fillText(tx.group || '-', paddingX + 155, curY + 17);
 
       ctx.textAlign = 'right';
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 11.5px "Prompt", sans-serif';
-      ctx.fillText(`฿${(Number(tx.amount) || 0).toLocaleString()}`, width - 30, curY + 17);
+      ctx.fillText(`฿${(Number(tx.amount) || 0).toLocaleString()}`, width - paddingX - 14, curY + 17);
       ctx.textAlign = 'left';
 
       curY += rowHeight;
@@ -2026,18 +2033,18 @@ const App = {
     curY += 8;
 
     // 5. Total Amount Due Box
-    roundRect(18, curY, width - 36, 52, 12, true, true, '#a7f3d0', '#ecfdf5');
+    roundRect(paddingX, curY, innerWidth, 54, 12, true, true, '#a7f3d0', '#ecfdf5');
     ctx.fillStyle = '#065f46';
     ctx.font = 'bold 13px "Prompt", sans-serif';
-    ctx.fillText('ยอดรวมที่ต้องชำระทั้งสิ้น', 34, curY + 31);
+    ctx.fillText('ยอดรวมที่ต้องชำระทั้งสิ้น', paddingX + 16, curY + 32);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#047857';
-    ctx.font = '900 20px "Prompt", sans-serif';
-    ctx.fillText(`฿${st.totalAmount.toLocaleString()}`, width - 34, curY + 33);
+    ctx.font = '900 19px "Prompt", sans-serif';
+    ctx.fillText(`฿${st.totalAmount.toLocaleString()}`, width - paddingX - 14, curY + 34);
     ctx.textAlign = 'left';
 
-    curY += 60;
+    curY += 62;
 
     // 6. Footer Notice
     ctx.textAlign = 'center';
@@ -2045,14 +2052,30 @@ const App = {
     ctx.font = '400 11px "Prompt", sans-serif';
     ctx.fillText('ขอบพระคุณครับ/ค่ะ 🙏', width / 2, curY + 14);
 
-    ctx.fillStyle = '#cbd5e1';
-    ctx.font = '400 9px "Prompt", sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '400 9.5px "Prompt", sans-serif';
     ctx.fillText('ระบบบันทึกการสอน Money Plus v.3', width / 2, curY + 30);
 
-    // Update responsive preview img for zero clipping & native iPad touch-and-hold saving
+    // Generate responsive preview img and pre-cache Blob & File
     const previewImg = document.getElementById('slip-preview-img');
+    const dataUrl = canvas.toDataURL('image/png');
+    this.state.currentSlipDataUrl = dataUrl;
     if (previewImg) {
-      previewImg.src = canvas.toDataURL('image/png');
+      previewImg.src = dataUrl;
+    }
+
+    if (canvas.toBlob) {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          this.state.currentSlipBlob = blob;
+          const studentName = st.name || 'นักเรียน';
+          try {
+            this.state.currentSlipFile = new File([blob], `ใบแจ้งยอด_${studentName}.png`, { type: 'image/png' });
+          } catch (e) {
+            console.warn('File constructor not supported, using Blob', e);
+          }
+        }
+      }, 'image/png');
     }
   },
 
@@ -2063,13 +2086,29 @@ const App = {
     const studentName = this.state.currentSlipStudentName || 'นักเรียน';
     const filename = `ใบแจ้งยอด_${studentName}.png`;
 
-    // 1. Web Share API (native sheet on iPadOS, iOS Safari & Android: lets user "Save Image" to Photos or send to LINE directly)
+    // 1. Web Share API (Instant native sheet on iPadOS, iOS Safari & Android: lets user "Save Image" to Photos or send to LINE directly)
+    if (this.state.currentSlipFile && navigator.canShare && navigator.canShare({ files: [this.state.currentSlipFile] })) {
+      navigator.share({
+        files: [this.state.currentSlipFile],
+        title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
+        text: `ใบแจ้งยอดค้างชำระค่าเรียนของ ${studentName}`
+      }).then(() => {
+        this.showToast('แชร์/บันทึกรูปภาพเรียบร้อย 🎉', 'success');
+      }).catch(err => {
+        if (err.name === 'AbortError') return; // User closed sheet
+        console.warn('Share sheet dismissed, falling back to download', err);
+        this._executeDirectDownload(canvas, filename);
+      });
+      return;
+    }
+
+    // 2. Fallback: try creating file if not ready yet
     if (navigator.share && navigator.canShare && canvas.toBlob) {
       canvas.toBlob(async (blob) => {
         if (blob) {
-          const file = new File([blob], filename, { type: 'image/png' });
-          if (navigator.canShare({ files: [file] })) {
-            try {
+          try {
+            const file = new File([blob], filename, { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
               await navigator.share({
                 files: [file],
                 title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
@@ -2077,10 +2116,9 @@ const App = {
               });
               this.showToast('แชร์/บันทึกรูปภาพเรียบร้อย 🎉', 'success');
               return;
-            } catch (err) {
-              if (err.name === 'AbortError') return; // User closed sheet
-              console.warn('Share sheet dismissed, fallback to direct download', err);
             }
+          } catch (e) {
+            console.warn('Async share failed:', e);
           }
         }
         this._executeDirectDownload(canvas, filename);
@@ -2092,6 +2130,19 @@ const App = {
   },
 
   _executeDirectDownload: function(canvas, filename) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+      // On iOS Safari without WebShare, opening in new tab lets user long press and tap "Save Image"
+      const dataUrl = this.state.currentSlipDataUrl || canvas.toDataURL('image/png');
+      const win = window.open();
+      if (win) {
+        win.document.write(`<title>${filename}</title><body style="margin:0;background:#18181b;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#fff;padding:16px;box-sizing:border-box;"><p style="margin-bottom:12px;font-size:14px;color:#a1a1aa;">แตะค้างที่รูปภาพด้านล่างเพื่อ <b>"บันทึกภาพ"</b> ลงอัลบั้ม</p><img src="${dataUrl}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);"></body>`);
+        this.showToast('เปิดรูปในแท็บใหม่แล้ว แตะค้างเพื่อบันทึกรูป', 'info');
+        return;
+      }
+    }
+
     if (canvas.toBlob) {
       canvas.toBlob(blob => {
         if (!blob) {
@@ -2108,7 +2159,7 @@ const App = {
         setTimeout(() => {
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
-        }, 1200);
+        }, 1500);
         this.showToast('ดาวน์โหลดรูปภาพเรียบร้อย (หรือแตะค้างที่รูปเพื่อบันทึก)', 'info');
       }, 'image/png');
     } else {
@@ -2117,7 +2168,7 @@ const App = {
   },
 
   _fallbackDataUrlDownload: function(canvas, filename) {
-    const dataUrl = canvas.toDataURL('image/png');
+    const dataUrl = this.state.currentSlipDataUrl || canvas.toDataURL('image/png');
     const link = document.createElement('a');
     link.download = filename;
     link.href = dataUrl;
@@ -2126,7 +2177,7 @@ const App = {
     link.click();
     setTimeout(() => {
       document.body.removeChild(link);
-    }, 1200);
+    }, 1500);
     this.showToast('ดาวน์โหลดรูปภาพเรียบร้อย', 'info');
   },
 
@@ -2138,26 +2189,17 @@ const App = {
     const isTouchDevice = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
     // On iPad / iPhone, Web Share API lets users choose LINE directly
-    if (isTouchDevice && navigator.share && navigator.canShare && canvas.toBlob) {
-      canvas.toBlob(async (blob) => {
-        if (blob) {
-          const file = new File([blob], `ใบแจ้งยอด_${studentName}.png`, { type: 'image/png' });
-          if (navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({
-                files: [file],
-                title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
-                text: `ใบแจ้งยอดค้างชำระค่าเรียนของ ${studentName}`
-              });
-              this.showToast('ส่งรูปภาพเรียบร้อย 🎉', 'success');
-              return;
-            } catch (err) {
-              if (err.name === 'AbortError') return;
-            }
-          }
-        }
+    if (isTouchDevice && this.state.currentSlipFile && navigator.canShare && navigator.canShare({ files: [this.state.currentSlipFile] })) {
+      navigator.share({
+        files: [this.state.currentSlipFile],
+        title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
+        text: `ใบแจ้งยอดค้างชำระค่าเรียนของ ${studentName}`
+      }).then(() => {
+        this.showToast('ส่งรูปภาพเรียบร้อย 🎉', 'success');
+      }).catch((err) => {
+        if (err.name === 'AbortError') return;
         this._tryClipboardCopy(canvas);
-      }, 'image/png');
+      });
       return;
     }
 
