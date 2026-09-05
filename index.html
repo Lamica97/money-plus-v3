@@ -1281,11 +1281,15 @@
         <button onclick="App.closeSlipModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 text-lg transition">✕</button>
       </div>
 
-      <!-- Canvas Preview Area -->
-      <div class="bg-slate-50 rounded-2xl p-3 flex items-center justify-center border border-slate-200 overflow-hidden">
-        <div class="max-h-[58vh] overflow-y-auto rounded-xl shadow-sm bg-white p-1">
-          <canvas id="slip-canvas" class="max-w-full h-auto rounded-lg block"></canvas>
+      <!-- Canvas & Responsive Image Preview Area (iPad & Mobile Optimized) -->
+      <div class="bg-slate-100 dark:bg-zinc-900 rounded-2xl p-2 sm:p-3 flex flex-col items-center justify-center border border-slate-200 dark:border-zinc-800 w-full overflow-hidden">
+        <div class="max-h-[54vh] overflow-y-auto w-full flex justify-center rounded-xl bg-white p-1 shadow-sm">
+          <img id="slip-preview-img" class="w-full h-auto rounded-lg block max-w-[460px] shadow-sm select-none" alt="รูปภาพใบแจ้งยอด">
+          <canvas id="slip-canvas" class="hidden"></canvas>
         </div>
+        <p class="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 mt-2 text-center select-none">
+          💡 บน iPad / iPhone: สามารถ<strong>แตะค้างที่รูปภาพ</strong>เพื่อบันทึกลงอัลบั้ม หรือกดปุ่มด้านล่างเพื่อส่งต่อ/ดาวน์โหลด
+        </p>
       </div>
 
       <!-- Action Buttons -->

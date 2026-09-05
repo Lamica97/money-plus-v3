@@ -1879,8 +1879,6 @@ const App = {
 
     canvas.width = width * scale;
     canvas.height = height * scale;
-    canvas.style.width = width + 'px';
-    canvas.style.height = height + 'px';
 
     const ctx = canvas.getContext('2d');
     ctx.scale(scale, scale);
@@ -2050,6 +2048,12 @@ const App = {
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '400 9px "Prompt", sans-serif';
     ctx.fillText('ระบบบันทึกการสอน Money Plus v.3', width / 2, curY + 30);
+
+    // Update responsive preview img for zero clipping & native iPad touch-and-hold saving
+    const previewImg = document.getElementById('slip-preview-img');
+    if (previewImg) {
+      previewImg.src = canvas.toDataURL('image/png');
+    }
   },
 
   downloadSlipImage: function() {
@@ -2057,18 +2061,111 @@ const App = {
     if (!canvas) return;
 
     const studentName = this.state.currentSlipStudentName || 'นักเรียน';
+    const filename = `ใบแจ้งยอด_${studentName}.png`;
+
+    // 1. Web Share API (native sheet on iPadOS, iOS Safari & Android: lets user "Save Image" to Photos or send to LINE directly)
+    if (navigator.share && navigator.canShare && canvas.toBlob) {
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          const file = new File([blob], filename, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({
+                files: [file],
+                title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
+                text: `ใบแจ้งยอดค้างชำระค่าเรียนของ ${studentName}`
+              });
+              this.showToast('แชร์/บันทึกรูปภาพเรียบร้อย 🎉', 'success');
+              return;
+            } catch (err) {
+              if (err.name === 'AbortError') return; // User closed sheet
+              console.warn('Share sheet dismissed, fallback to direct download', err);
+            }
+          }
+        }
+        this._executeDirectDownload(canvas, filename);
+      }, 'image/png');
+      return;
+    }
+
+    this._executeDirectDownload(canvas, filename);
+  },
+
+  _executeDirectDownload: function(canvas, filename) {
+    if (canvas.toBlob) {
+      canvas.toBlob(blob => {
+        if (!blob) {
+          this._fallbackDataUrlDownload(canvas, filename);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = url;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 1200);
+        this.showToast('ดาวน์โหลดรูปภาพเรียบร้อย (หรือแตะค้างที่รูปเพื่อบันทึก)', 'info');
+      }, 'image/png');
+    } else {
+      this._fallbackDataUrlDownload(canvas, filename);
+    }
+  },
+
+  _fallbackDataUrlDownload: function(canvas, filename) {
+    const dataUrl = canvas.toDataURL('image/png');
     const link = document.createElement('a');
-    link.download = `ใบแจ้งยอด_${studentName}.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.download = filename;
+    link.href = dataUrl;
+    link.target = '_blank';
+    document.body.appendChild(link);
     link.click();
-    this.showToast('ดาวน์โหลดรูปภาพใบแจ้งยอดเรียบร้อย', 'success');
+    setTimeout(() => {
+      document.body.removeChild(link);
+    }, 1200);
+    this.showToast('ดาวน์โหลดรูปภาพเรียบร้อย', 'info');
   },
 
   copySlipImage: function() {
     const canvas = document.getElementById('slip-canvas');
     if (!canvas) return;
 
-    if (navigator.clipboard && window.ClipboardItem) {
+    const studentName = this.state.currentSlipStudentName || 'นักเรียน';
+    const isTouchDevice = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    // On iPad / iPhone, Web Share API lets users choose LINE directly
+    if (isTouchDevice && navigator.share && navigator.canShare && canvas.toBlob) {
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          const file = new File([blob], `ใบแจ้งยอด_${studentName}.png`, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({
+                files: [file],
+                title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
+                text: `ใบแจ้งยอดค้างชำระค่าเรียนของ ${studentName}`
+              });
+              this.showToast('ส่งรูปภาพเรียบร้อย 🎉', 'success');
+              return;
+            } catch (err) {
+              if (err.name === 'AbortError') return;
+            }
+          }
+        }
+        this._tryClipboardCopy(canvas);
+      }, 'image/png');
+      return;
+    }
+
+    this._tryClipboardCopy(canvas);
+  },
+
+  _tryClipboardCopy: function(canvas) {
+    if (navigator.clipboard && window.ClipboardItem && canvas.toBlob) {
       canvas.toBlob(blob => {
         if (!blob) {
           this.downloadSlipImage();
@@ -2077,9 +2174,9 @@ const App = {
         navigator.clipboard.write([
           new ClipboardItem({ 'image/png': blob })
         ]).then(() => {
-          this.showToast('คัดลอกรูปภาพแล้ว! กด Ctrl+V ใน LINE ได้เลย', 'success');
+          this.showToast('คัดลอกรูปภาพแล้ว! กดวาง (Ctrl+V) ใน LINE ได้เลย', 'success');
         }).catch(err => {
-          console.warn('Clipboard write image failed, downloading instead', err);
+          console.warn('Clipboard write failed, downloading/sharing instead', err);
           this.downloadSlipImage();
         });
       }, 'image/png');
