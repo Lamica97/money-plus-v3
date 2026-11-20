@@ -1,0 +1,126 @@
+/* Money Plus v.4 - Midnight OLED & Light Mode Design System */
+@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --bg-main: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --bg-hover: #e2e8f0;
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent-emerald: #10b981;
+  --accent-emerald-glow: rgba(16, 185, 129, 0.14);
+}
+
+html.dark {
+  --bg-main: #09090b;
+  --bg-surface: #121215;
+  --bg-elevated: #1a1a1f;
+  --bg-hover: #27272f;
+  --border-subtle: #24242b;
+  --border-strong: #34343e;
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --accent-emerald: #10b981;
+  --accent-emerald-glow: rgba(16, 185, 129, 0.18);
+}
+
+* {
+  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+/* Surface & Card Classes */
+.surface-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+}
+
+.surface-elevated {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Active Attendance Card Subtle Emerald Glow */
+.stu-card-active {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 18px -4px var(--accent-emerald-glow), inset 0 0 0 1px rgba(16, 185, 129, 0.25);
+}
+
+html.dark .stu-card-active {
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.10) 0%, rgba(18, 18, 21, 0.96) 100%) !important;
+}
+
+html:not(.dark) .stu-card-active {
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.08) 0%, #ffffff 100%) !important;
+}
+
+/* Unchecked Student Card */
+.stu-card-idle {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  opacity: 0.85;
+}
+.stu-card-idle:hover {
+  opacity: 1;
+  border-color: var(--border-strong);
+}
+
+/* High Contrast Amber in Dark Mode */
+html.dark .amber-high-contrast {
+  color: #fbbf24 !important;
+}
+
+/* Form Inputs in Dark Mode */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #18181c;
+  border-color: #2e2e38;
+  color: #f4f4f5;
+  color-scheme: dark;
+}
+
+html.dark input:focus,
+html.dark select:focus {
+  border-color: #10b981;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+/* Smooth Tab & Modal Transitions */
+.fade-in {
+  animation: fadeIn 0.16s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}

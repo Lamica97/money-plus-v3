@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="th" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Money Plus v.4 — ระบบบันทึกการสอน & จัดการค่าเรียน</title>
+
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="theme-color" content="#09090b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Money Plus v4">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="64x64" href="./favicon-64.png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+
+  <!-- Tailwind CSS + Custom Design System -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Prompt', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="stylesheet" href="./src/css/theme.css?v=20261120_v4">
+
+  <!-- Chart.js & SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-emerald-500 selection:text-zinc-950">
+
+  <!-- ==================== CLEAN MINIMAL TOP HEADER ==================== -->
+  <header class="sticky top-0 z-30 backdrop-blur-md bg-white/85 dark:bg-zinc-950/85 border-b border-slate-200 dark:border-zinc-800/80">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-3">
+
+      <!-- Left: Brand Logo & Live Cloud Status Pill -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-zinc-950 font-black text-sm shadow-md shadow-emerald-500/20">
+          M+
+        </div>
+        <div class="flex items-center gap-1.5">
+          <h1 class="font-bold text-sm sm:text-base tracking-tight text-slate-900 dark:text-zinc-100">Money Plus</h1>
+          <span class="px-1.5 py-0.5 text-[10px] font-extrabold rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">v.4</span>
+        </div>
+
+        <!-- Compact Cloud Status Pill -->
+        <button onclick="App.openSettingsDrawer()" class="ml-1 px-2 py-1 rounded-full surface-elevated flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-zinc-400 hover:border-emerald-500/40 transition" title="สถานะการซิงค์คลาวด์ v.4">
+          <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="cloud-status-text" class="hidden sm:inline">Cloud v.4</span>
+        </button>
+      </div>
+
+      <!-- Center: 5 Clean Navigation Tabs (Desktop & iPad) -->
+      <nav class="hidden md:flex items-center gap-1">
+        <button onclick="App.switchTab('quick-record')" id="nav-quick-record" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 transition flex items-center gap-1.5 whitespace-nowrap">
+          <span>⚡</span> เช็คชื่อ
+        </button>
+        <button onclick="App.switchTab('unpaid')" id="nav-unpaid" class="px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition flex items-center gap-1.5 whitespace-nowrap">
+          <span>⚠️</span> ค้างชำระ
+          <span id="nav-unpaid-badge" class="hidden px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-amber-500 text-zinc-950">0</span>
+        </button>
+        <button onclick="App.switchTab('history')" id="nav-history" class="px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition flex items-center gap-1.5 whitespace-nowrap">
+          <span>📋</span> ประวัติ & ปฏิทิน
+        </button>
+        <button onclick="App.switchTab('dashboard')" id="nav-dashboard" class="px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition flex items-center gap-1.5 whitespace-nowrap">
+          <span>📊</span> สรุปรายรับ
+        </button>
+        <button onclick="App.switchTab('master')" id="nav-master" class="px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 transition flex items-center gap-1.5 whitespace-nowrap">
+          <span>👥</span> นักเรียน
+        </button>
+      </nav>
+
+      <!-- Right: Only 2 Clean Controls (Theme Toggle & Data/Settings Center) -->
+      <div class="flex items-center gap-2">
+        <button onclick="App.toggleTheme()" id="theme-toggle-btn" class="w-9 h-9 rounded-xl surface-elevated flex items-center justify-center text-sm hover:border-emerald-500/40 transition" title="สลับโหมดมืด / สว่าง">
+          <span id="theme-toggle-icon">☀️</span>
+        </button>
+        <button onclick="App.openSettingsDrawer()" class="px-3 py-2 rounded-xl surface-elevated hover:border-emerald-500/40 text-xs font-semibold text-slate-700 dark:text-zinc-200 flex items-center gap-1.5 transition">
+          <span>⚙️</span>
+          <span class="hidden sm:inline">ข้อมูล & ตั้งค่า</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT AREA ==================== -->
+  <main class="max-w-7xl mx-auto px-3 sm:px-6 py-4 pb-24 md:pb-10 flex-1 w-full">
+
+    <!-- ==================== TAB 1: ⚡ QUICK RECORD (1-TAP ATTENDANCE) ==================== -->
+    <div id="tab-panel-quick-record" class="space-y-4 fade-in">
+
+      <!-- Unified Smart Control Bar -->
+      <div class="surface-card p-3.5 sm:p-4 space-y-3">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+
+          <!-- Left: Date & Group Selector -->
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Date Picker with Quick Today/Yesterday Pills -->
+            <div class="flex items-center gap-1.5 surface-elevated px-2.5 py-1.5 rounded-xl">
+              <span class="text-xs">📅</span>
+              <input type="date" id="record-date-input" class="text-xs font-bold bg-transparent border-0 focus:ring-0 p-0">
+              <button type="button" onclick="App.setRecordDateQuick(0)" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500 hover:text-zinc-950 transition">วันนี้</button>
+              <button type="button" onclick="App.setRecordDateQuick(-1)" class="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-emerald-500/20 transition">เมื่อวาน</button>
+            </div>
+
+            <!-- Group Dropdown -->
+            <div class="flex items-center gap-1.5 surface-elevated px-2.5 py-1.5 rounded-xl">
+              <span class="text-xs">👥</span>
+              <select id="record-group-select" class="text-xs font-bold bg-transparent border-0 focus:ring-0 p-0 pr-4 cursor-pointer">
+                <!-- Populated by JS -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Right: Add Extra / Individual Session Button -->
+          <div class="flex items-center justify-between sm:justify-end gap-2">
+            <button type="button" onclick="App.openSingleRecordModal()" class="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition flex items-center gap-1.5">
+              <span>+</span> เพิ่มคนแทรก / บันทึกเดี่ยว
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Grade Chips Bar (1-Tap Grade Filtering) -->
+        <div class="pt-2.5 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <span class="text-[11px] font-bold text-slate-400 dark:text-zinc-500 mr-1 whitespace-nowrap">ระดับชั้น:</span>
+            <div id="record-grade-chips" class="flex items-center gap-1.5">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5 text-xs">
+            <button type="button" onclick="App.setAllPresent(true)" class="px-2.5 py-1 rounded-lg surface-elevated hover:border-emerald-500/40 text-slate-600 dark:text-zinc-300 font-semibold transition">✓ เลือกทั้งชั้น</button>
+            <button type="button" onclick="App.setAllPresent(false)" class="px-2.5 py-1 rounded-lg surface-elevated hover:border-red-500/40 text-slate-500 dark:text-zinc-400 font-medium transition">✕ ล้าง</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Student Attendance Grid (4 Cards per row on iPad/PC, Progressive Disclosure) -->
+      <div id="session-students-list" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Sticky Bottom Action Bar for Saving Session -->
+      <div class="sticky bottom-16 md:bottom-4 z-20 surface-card p-3 sm:px-5 shadow-2xl border-emerald-500/30 flex items-center justify-between gap-3 backdrop-blur-md bg-white/90 dark:bg-zinc-900/90">
+        <div class="flex items-center gap-4 text-xs">
+          <div>
+            <span class="text-slate-400 dark:text-zinc-400">มาเรียน:</span>
+            <strong id="session-count" class="ml-1 text-sm font-black text-emerald-400">0 คน</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 dark:text-zinc-400">ยอดรอบนี้:</span>
+            <strong id="session-total-amount" class="ml-1 text-sm sm:text-base font-black text-emerald-400">฿0</strong>
+          </div>
+        </div>
+
+        <button type="button" id="btn-save-session" onclick="App.saveSessionRecords()"
+          class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-extrabold text-xs sm:text-sm shadow-lg shadow-emerald-500/20 transition active:scale-95">
+          💾 บันทึกการสอน
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB 2: ⚠️ UNPAID TRACKER & SLIP STUDIO ==================== -->
+    <div id="tab-panel-unpaid" class="hidden space-y-4 fade-in">
+
+      <!-- KPI Summary Bar & Filters in 1 Clean Card -->
+      <div class="surface-card p-4 space-y-3">
+        <div class="grid grid-cols-3 gap-2.5">
+          <div class="surface-elevated p-3 rounded-xl">
+            <div class="text-[11px] text-slate-400 dark:text-zinc-400">นักเรียนค้างชำระ</div>
+            <div id="unpaid-stat-students" class="text-base sm:text-lg font-black text-slate-900 dark:text-zinc-100 mt-0.5">0 คน</div>
+          </div>
+          <div class="surface-elevated p-3 rounded-xl">
+            <div class="text-[11px] text-slate-400 dark:text-zinc-400">จำนวนคาบที่ค้าง</div>
+            <div id="unpaid-stat-sessions" class="text-base sm:text-lg font-black text-slate-900 dark:text-zinc-100 mt-0.5">0 คาบ</div>
+          </div>
+          <div class="surface-elevated p-3 rounded-xl border-amber-500/30">
+            <div class="text-[11px] amber-high-contrast text-amber-600 font-semibold">ยอดค้างชำระรวม</div>
+            <div id="unpaid-stat-amount" class="text-base sm:text-lg font-black amber-high-contrast text-amber-600 mt-0.5">฿0</div>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-xs font-bold text-slate-400 mr-1">ชั้น:</span>
+            <div id="unpaid-grade-chips" class="flex items-center gap-1.5 flex-wrap"></div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input type="text" placeholder="🔍 ค้นหาชื่อนักเรียน..." oninput="App.state.unpaidSearch = this.value; App.renderUnpaidTracker()"
+              class="text-xs rounded-xl px-3 py-1.5 border w-44 sm:w-52">
+            <select onchange="App.state.unpaidSort = this.value; App.renderUnpaidTracker()" class="text-xs rounded-xl px-2.5 py-1.5 border font-medium">
+              <option value="amount-desc">ยอดค้าง มาก ➔ น้อย</option>
+              <option value="count-desc">จำนวนคาบ มาก ➔ น้อย</option>
+              <option value="name-asc">ชื่อ ก ➔ ฮ</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unpaid Students Grid -->
+      <div id="unpaid-students-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+        <!-- Populated by JS -->
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB 3: 📋 UNIFIED HISTORY & CALENDAR ==================== -->
+    <div id="tab-panel-history" class="hidden space-y-4 fade-in">
+
+      <!-- Top View Switcher & Compact Filter Bar -->
+      <div class="surface-card p-3.5 sm:p-4 space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <!-- Segmented Control: Table vs Calendar -->
+          <div class="inline-flex p-1 rounded-xl surface-elevated self-start">
+            <button type="button" id="btn-view-table" onclick="App.setHistoryViewMode('table')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-zinc-950 shadow-sm transition">
+              📑 ตารางรายการ
+            </button>
+            <button type="button" id="btn-view-calendar" onclick="App.setHistoryViewMode('calendar')" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-zinc-400 transition">
+              📅 ปฏิทินรายเดือน
+            </button>
+          </div>
+
+          <!-- Summary Pills -->
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <span id="tx-filter-count" class="px-2.5 py-1 rounded-lg surface-elevated font-semibold">0 รายการ</span>
+            <span class="px-2.5 py-1 rounded-lg surface-elevated font-bold">รวม: <strong id="tx-filter-sum" class="text-emerald-400">฿0</strong></span>
+            <span class="px-2.5 py-1 rounded-lg surface-elevated">จ่ายแล้ว: <strong id="tx-filter-paid" class="text-blue-400">฿0</strong></span>
+            <span class="px-2.5 py-1 rounded-lg surface-elevated">ค้าง: <strong id="tx-filter-pending" class="amber-high-contrast">฿0</strong></span>
+          </div>
+        </div>
+
+        <!-- TABLE SECTION -->
+        <div id="history-table-section" class="space-y-3">
+          <!-- Single Compact Filter Row -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
+            <!-- Status Chips -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <button type="button" id="chip-all" onclick="App.setQuickChip('all')" class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-zinc-950">ทั้งหมด</button>
+              <button type="button" id="chip-pending" onclick="App.setQuickChip('pending')" class="px-3 py-1 rounded-full text-xs font-medium surface-elevated">⚠️ ค้างจ่าย</button>
+              <button type="button" id="chip-transfer" onclick="App.setQuickChip('transfer')" class="px-3 py-1 rounded-full text-xs font-medium surface-elevated">📱 เงินโอน</button>
+              <button type="button" id="chip-cash" onclick="App.setQuickChip('cash')" class="px-3 py-1 rounded-full text-xs font-medium surface-elevated">💵 เงินสด</button>
+            </div>
+
+            <!-- Month/Year + Search + Toggle Advanced Filters -->
+            <div class="flex items-center gap-2 flex-wrap">
+              <select id="filter-month" onchange="App.state.filter.month = this.value; App.state.page = 1; App.renderTransactionsTable()" class="text-xs rounded-xl px-2.5 py-1.5 border font-semibold">
+                <option value="all">ทุกเดือน</option>
+                <option value="ม.ค.">ม.ค.</option>
+                <option value="ก.พ.">ก.พ.</option>
+                <option value="มี.ค.">มี.ค.</option>
+                <option value="เม.ย.">เม.ย.</option>
+                <option value="พ.ค.">พ.ค.</option>
+                <option value="มิ.ย.">มิ.ย.</option>
+                <option value="ก.ค.">ก.ค.</option>
+                <option value="ส.ค.">ส.ค.</option>
+                <option value="ก.ย.">ก.ย.</option>
+                <option value="ต.ค.">ต.ค.</option>
+                <option value="พ.ย.">พ.ย.</option>
+                <option value="ธ.ค.">ธ.ค.</option>
+              </select>
+
+              <select id="filter-year" onchange="App.state.filter.year = this.value; App.state.page = 1; App.renderTransactionsTable()" class="text-xs rounded-xl px-2.5 py-1.5 border font-semibold">
+                <option value="all">ทุกปี</option>
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+              </select>
+
+              <input type="text" id="filter-search" placeholder="🔍 ค้นหาชื่อ/วันที่..."
+                oninput="App.state.filter.search = this.value; App.state.page = 1; App.renderTransactionsTable()"
+                class="text-xs rounded-xl px-3 py-1.5 border w-40 sm:w-48">
+
+              <button type="button" onclick="App.toggleAdvancedFilters()" class="px-2.5 py-1.5 rounded-xl surface-elevated text-xs font-medium hover:border-emerald-500/40" title="ตัวกรองเพิ่มเติม">
+                🌪️ ตัวกรอง
+              </button>
+              <button type="button" onclick="App.resetFilters()" class="px-2.5 py-1.5 rounded-xl surface-elevated text-xs text-slate-400 hover:text-red-400" title="ล้างตัวกรอง">
+                🔄
+              </button>
+            </div>
+          </div>
+
+          <!-- Collapsible Advanced Filters (Hidden by default to keep UI clean!) -->
+          <div id="advanced-filters-panel" class="hidden pt-2 border-t border-slate-100 dark:border-zinc-800 grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <select id="filter-grade" onchange="App.state.filter.grade = this.value; App.state.page = 1; App.renderTransactionsTable()" class="text-xs rounded-xl px-3 py-1.5 border">
+              <option value="all">🎓 ทุกระดับชั้น</option>
+              <option value="ป.6">ป.6</option>
+              <option value="ม.1">ม.1</option>
+              <option value="ม.2">ม.2</option>
+              <option value="ม.3">ม.3</option>
+              <option value="ม.4">ม.4</option>
+              <option value="ม.5">ม.5</option>
+              <option value="ม.6">ม.6</option>
+            </select>
+            <select id="filter-group" onchange="App.state.filter.group = this.value; App.state.page = 1; App.renderTransactionsTable()" class="text-xs rounded-xl px-3 py-1.5 border">
+              <option value="all">👥 ทุกกลุ่มเรียน</option>
+            </select>
+          </div>
+
+          <!-- Clean Transactions Table -->
+          <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800 max-h-[64vh] overflow-y-auto">
+            <table class="min-w-full text-xs">
+              <thead class="surface-elevated text-slate-500 dark:text-zinc-400 font-bold text-left sticky top-0 z-10">
+                <tr>
+                  <th class="py-2.5 px-3 w-10">#</th>
+                  <th class="py-2.5 px-3">วันที่เรียน</th>
+                  <th class="py-2.5 px-3">นักเรียน</th>
+                  <th class="py-2.5 px-3">ชั้น</th>
+                  <th class="py-2.5 px-3">กลุ่ม</th>
+                  <th class="py-2.5 px-3 text-right">ค่าเรียน</th>
+                  <th class="py-2.5 px-3 text-center">สถานะ (แตะเพื่อเปลี่ยน)</th>
+                  <th class="py-2.5 px-3 text-center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="tx-table-body"></tbody>
+            </table>
+          </div>
+
+          <div id="tx-pagination"></div>
+        </div>
+
+        <!-- CALENDAR SECTION -->
+        <div id="history-calendar-section" class="hidden space-y-3 pt-2 border-t border-slate-100 dark:border-zinc-800">
+          <div class="flex items-center justify-between">
+            <h3 id="calendar-month-title" class="font-bold text-sm sm:text-base">ปฏิทินการสอน</h3>
+            <div class="flex items-center gap-1.5">
+              <button onclick="App.changeCalendarMonth(-1)" class="px-3 py-1.5 rounded-xl surface-elevated text-xs font-bold">◀</button>
+              <button onclick="App.setCalendarToday()" class="px-3 py-1.5 rounded-xl surface-elevated text-xs font-semibold">เดือนนี้</button>
+              <button onclick="App.changeCalendarMonth(1)" class="px-3 py-1.5 rounded-xl surface-elevated text-xs font-bold">▶</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-7 gap-1.5 text-center text-xs font-bold text-slate-400 pb-1">
+            <div class="text-red-400">อา.</div>
+            <div>จ.</div>
+            <div>อ.</div>
+            <div>พ.</div>
+            <div>พฤ.</div>
+            <div>ศ.</div>
+            <div class="text-blue-400">ส.</div>
+          </div>
+
+          <div id="calendar-days-grid" class="grid grid-cols-7 gap-1.5"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== TAB 4: 📊 ANALYTICS DASHBOARD ==================== -->
+    <div id="tab-panel-dashboard" class="hidden space-y-4 fade-in">
+
+      <div class="surface-card p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="font-bold text-sm sm:text-base">📊 สรุปรายรับ & สถิติการสอน</h2>
+          <p class="text-[11px] text-slate-400">วิเคราะห์รายรับตามช่วงเดือนและระดับชั้น</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="dash-month-select" onchange="App.state.dashMonth = this.value; App.renderDashboard()" class="text-xs rounded-xl px-3 py-1.5 border font-bold">
+            <option value="all">ทั้งปี (ทุกเดือน)</option>
+            <option value="ม.ค.">มกราคม</option>
+            <option value="ก.พ.">กุมภาพันธ์</option>
+            <option value="มี.ค.">มีนาคม</option>
+            <option value="เม.ย.">เมษายน</option>
+            <option value="พ.ค.">พฤษภาคม</option>
+            <option value="มิ.ย.">มิถุนายน</option>
+            <option value="ก.ค.">กรกฎาคม</option>
+            <option value="ส.ค.">สิงหาคม</option>
+            <option value="ก.ย.">กันยายน</option>
+            <option value="ต.ค.">ตุลาคม</option>
+            <option value="พ.ย.">พฤศจิกายน</option>
+            <option value="ธ.ค.">ธันวาคม</option>
+          </select>
+          <select id="dash-year-select" onchange="App.state.dashYear = this.value; App.renderDashboard()" class="text-xs rounded-xl px-3 py-1.5 border font-bold">
+            <option value="2026">ปี 2026</option>
+            <option value="2025">ปี 2025</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div class="surface-card p-4">
+          <div class="text-[11px] text-slate-400">รายรับรวม (เดือนที่เลือก)</div>
+          <div id="dash-month-income" class="text-xl font-black text-emerald-400 mt-1">฿0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">รวมจ่ายแล้ว + ค้างจ่าย</div>
+        </div>
+        <div class="surface-card p-4">
+          <div class="text-[11px] text-blue-400">เงินโอน (เดือนที่เลือก)</div>
+          <div id="dash-month-transfer" class="text-xl font-black text-blue-400 mt-1">฿0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">โอนเข้าบัญชี</div>
+        </div>
+        <div class="surface-card p-4">
+          <div class="text-[11px] text-emerald-400">เงินสด (เดือนที่เลือก)</div>
+          <div id="dash-month-cash" class="text-xl font-black text-emerald-400 mt-1">฿0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">รับเงินสด</div>
+        </div>
+        <div onclick="App.switchTab('unpaid')" class="surface-card p-4 cursor-pointer hover:border-amber-500/40 transition">
+          <div class="text-[11px] amber-high-contrast">ค้างจ่าย (เดือนที่เลือก)</div>
+          <div id="dash-pending-amount" class="text-xl font-black amber-high-contrast mt-1">฿0</div>
+          <div class="text-[10px] amber-high-contrast mt-0.5">คลิกเพื่อติดตาม &rarr;</div>
+        </div>
+        <div class="col-span-2 lg:col-span-1 surface-card p-4">
+          <div class="text-[11px] text-slate-400">รายรับสะสมทั้งหมด (จ่ายแล้ว)</div>
+          <div id="dash-total-income" class="text-xl font-black text-slate-900 dark:text-zinc-100 mt-1">฿0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">ทุกปีรวมกัน</div>
+        </div>
+      </div>
+
+      <!-- Charts & Grade Breakdown -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 surface-card p-4">
+          <h3 class="font-bold text-sm mb-3">แนวโน้มรายรับรายเดือน (ปี 2025 vs 2026)</h3>
+          <div class="h-60 relative">
+            <canvas id="chart-monthly-trend"></canvas>
+          </div>
+        </div>
+        <div class="surface-card p-4 space-y-2">
+          <h3 class="font-bold text-sm pb-2 border-b border-slate-100 dark:border-zinc-800">สัดส่วนรายรับตามระดับชั้น</h3>
+          <div id="dash-grade-breakdown" class="divide-y divide-slate-100 dark:divide-zinc-800/60"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB 5: 👥 STUDENTS & GROUPS ==================== -->
+    <div id="tab-panel-master" class="hidden space-y-4 fade-in">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Students List (2 Cols) -->
+        <div class="lg:col-span-2 surface-card p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-zinc-800">
+            <div>
+              <h3 class="font-bold text-base">👥 รายชื่อนักเรียน</h3>
+              <p class="text-[11px] text-slate-400">แก้ไขชื่อ ระดับชั้น หรือค่าเรียนมาตรฐาน (รองรับการอัปเดตชื่อในประวัติย้อนหลัง)</p>
+            </div>
+            <button onclick="App.openStudentModal(null)" class="px-3.5 py-2 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-bold shadow-sm">
+              + เพิ่มนักเรียนใหม่
+            </button>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div id="master-grade-chips" class="flex items-center gap-1.5 flex-wrap"></div>
+            <input type="text" placeholder="🔍 ค้นหาชื่อนักเรียน..." oninput="App.state.masterSearch = this.value; App.renderMaster()"
+              class="text-xs rounded-xl px-3 py-1.5 border w-full sm:w-48">
+          </div>
+
+          <div id="master-students-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[62vh] overflow-y-auto pr-1"></div>
+        </div>
+
+        <!-- Groups List (1 Col) -->
+        <div class="surface-card p-4 space-y-3">
+          <div class="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-zinc-800">
+            <div>
+              <h3 class="font-bold text-base">🗓️ กลุ่มรอบเรียน</h3>
+              <p class="text-[11px] text-slate-400">ตัวเลือกรอบเรียนประจำสัปดาห์</p>
+            </div>
+            <button onclick="App.openGroupModal()" class="px-3 py-1.5 rounded-xl surface-elevated text-xs font-bold hover:border-emerald-500/40">
+              + เพิ่มกลุ่ม
+            </button>
+          </div>
+          <div id="master-groups-list" class="space-y-2"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ==================== MOBILE BOTTOM NAVIGATION ==================== -->
+  <nav class="md:hidden fixed bottom-0 inset-x-0 z-30 backdrop-blur-md bg-white/95 dark:bg-zinc-950/95 border-t border-slate-200 dark:border-zinc-800 grid grid-cols-5 text-[10px]">
+    <button onclick="App.switchTab('quick-record')" id="mob-nav-quick-record" class="flex flex-col items-center justify-center py-1.5 px-2 text-emerald-400 font-bold">
+      <span class="text-base">⚡</span>
+      <span>เช็คชื่อ</span>
+    </button>
+    <button onclick="App.switchTab('unpaid')" id="mob-nav-unpaid" class="flex flex-col items-center justify-center py-1.5 px-2 text-slate-400 relative">
+      <span class="text-base">⚠️</span>
+      <span>ค้างชำระ</span>
+      <span id="mob-unpaid-badge" class="hidden absolute top-1 right-4 px-1.5 text-[9px] font-black rounded-full bg-amber-500 text-zinc-950">0</span>
+    </button>
+    <button onclick="App.switchTab('history')" id="mob-nav-history" class="flex flex-col items-center justify-center py-1.5 px-2 text-slate-400">
+      <span class="text-base">📋</span>
+      <span>ประวัติ</span>
+    </button>
+    <button onclick="App.switchTab('dashboard')" id="mob-nav-dashboard" class="flex flex-col items-center justify-center py-1.5 px-2 text-slate-400">
+      <span class="text-base">📊</span>
+      <span>รายรับ</span>
+    </button>
+    <button onclick="App.switchTab('master')" id="mob-nav-master" class="flex flex-col items-center justify-center py-1.5 px-2 text-slate-400">
+      <span class="text-base">👥</span>
+      <span>นักเรียน</span>
+    </button>
+  </nav>
+
+  <!-- ==================== MODAL 1: 📸 ENHANCED SLIP STUDIO (PAID + UNPAID SESSIONS, UNPAID TOTAL) ==================== -->
+  <div id="slip-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="surface-card max-w-lg w-full p-4 sm:p-5 space-y-3.5 my-auto shadow-2xl">
+      <div class="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-zinc-800">
+        <div>
+          <h3 class="font-bold text-base">📸 ใบแจ้งยอด & สรุปประวัติวันที่มาเรียน</h3>
+          <p class="text-[11px] text-slate-400">แสดงวันเรียนทั้งที่จ่ายแล้วและค้างจ่าย แต่สรุปยอดรวมเฉพาะที่ค้างจ่าย</p>
+        </div>
+        <button onclick="App.closeSlipModal()" class="w-8 h-8 rounded-full surface-elevated flex items-center justify-center text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <!-- Slip Display Mode Selector -->
+      <div class="space-y-2">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" id="slip-mode-active-months" onclick="App.setSlipMode('active-months')"
+            class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-500 text-zinc-950 transition">
+            📋 แสดงทั้งจ่ายแล้ว + ค้างจ่าย (เดือนที่ค้าง)
+          </button>
+          <button type="button" id="slip-mode-unpaid-only" onclick="App.setSlipMode('unpaid-only')"
+            class="px-2.5 py-1.5 rounded-lg text-[11px] font-medium surface-elevated text-slate-500 dark:text-zinc-400 transition">
+            ⏳ เฉพาะคาบค้างจ่าย
+          </button>
+          <button type="button" id="slip-mode-recent-12" onclick="App.setSlipMode('recent-12')"
+            class="px-2.5 py-1.5 rounded-lg text-[11px] font-medium surface-elevated text-slate-500 dark:text-zinc-400 transition">
+            📅 12 คาบล่าสุด
+          </button>
+        </div>
+
+        <label class="inline-flex items-center gap-2 text-xs text-slate-500 dark:text-zinc-400 cursor-pointer select-none">
+          <input type="checkbox" onchange="App.toggleSlipBankInfo(this.checked)" class="rounded text-emerald-500">
+          <span>🏦 แสดงข้อมูลบัญชีธนาคารรับโอนท้ายสลิป</span>
+        </label>
+      </div>
+
+      <!-- Responsive Slip Preview Image -->
+      <div class="surface-elevated rounded-2xl p-2 flex flex-col items-center justify-center overflow-hidden">
+        <div class="max-h-[50vh] overflow-y-auto w-full flex justify-center rounded-xl bg-white p-1.5">
+          <img id="slip-preview-img" class="w-auto max-w-full h-auto rounded-lg block select-none" style="max-height: 48vh; max-width: 390px; width: 100%; object-fit: contain;" alt="ใบแจ้งยอด">
+          <canvas id="slip-canvas" class="hidden"></canvas>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1.5 text-center">
+          💡 บน iPad / มือถือ: แตะปุ่ม "บันทึกรูป / แชร์" หรือแตะค้างที่รูปภาพเพื่อบันทึกเข้าอัลบั้ม
+        </p>
+      </div>
+
+      <!-- Slip Action Buttons -->
+      <div class="space-y-2">
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" onclick="App.downloadSlipImage()" class="py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-extrabold shadow-md transition flex items-center justify-center gap-1.5">
+            📥 บันทึกรูป / แชร์
+          </button>
+          <button type="button" onclick="App.copySlipImage()" class="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-1.5">
+            📋 คัดลอกรูป (ส่ง LINE)
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" onclick="App.copySlipText()" class="py-2 px-3 rounded-xl surface-elevated text-xs font-semibold">
+            💬 คัดลอกข้อความสรุป
+          </button>
+          <button type="button" onclick="App.markAllPaidForStudent()" class="py-2 px-3 rounded-xl bg-amber-500/15 amber-high-contrast border border-amber-500/30 text-xs font-bold">
+            ✓ ปิดยอดเป็นจ่ายแล้ว
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 2: ⚙️ SETTINGS & DATA CENTER DRAWER ==================== -->
+  <div id="settings-drawer-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-end">
+    <div class="surface-card w-full max-w-md h-full rounded-none sm:rounded-l-2xl p-5 overflow-y-auto flex flex-col justify-between space-y-6 shadow-2xl">
+      <div class="space-y-5">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+          <div>
+            <h3 class="font-bold text-base">⚙️ ศูนย์จัดการข้อมูล & ตั้งค่า (v.4)</h3>
+            <p id="drawer-cloud-status" class="text-[11px] text-emerald-400 mt-0.5">เชื่อมต่อคลาวด์ v.4 แล้ว</p>
+          </div>
+          <button onclick="App.closeSettingsDrawer()" class="w-8 h-8 rounded-full surface-elevated flex items-center justify-center">✕</button>
+        </div>
+
+        <!-- Section 1: Sync from v.3 -->
+        <div class="surface-elevated p-3.5 rounded-xl space-y-2 border-emerald-500/30">
+          <div class="text-xs font-bold text-emerald-400">🔄 ซิงค์ข้อมูลจากระบบเดิม (Money Plus v.3)</div>
+          <p class="text-[11px] text-slate-400">ดึงข้อมูลรายการเรียนและรายชื่อนักเรียนล่าสุดจาก v.3 มาอัปเดตเข้า v.4 โดยไม่กระทบข้อมูลใน v.3</p>
+          <button type="button" onclick="App.pullFromV3()" class="w-full py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-extrabold transition">
+            🔄 ดึงข้อมูลล่าสุดจาก v.3 เดี๋ยวนี้
+          </button>
+        </div>
+
+        <!-- Section 2: Export & Import Excel / CSV -->
+        <div class="space-y-2">
+          <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">สำรองข้อมูล & Google Sheets</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="App.exportExcel()" class="p-3 rounded-xl surface-elevated hover:border-emerald-500/40 text-left transition">
+              <div class="text-base">📊 ส่งออก Excel</div>
+              <div class="text-[10px] text-slate-400 mt-0.5">ไฟล์ .xlsx (ครบ 5 แผ่นงาน)</div>
+            </button>
+            <button type="button" onclick="App.exportCSV()" class="p-3 rounded-xl surface-elevated hover:border-emerald-500/40 text-left transition">
+              <div class="text-base">📄 ส่งออก CSV</div>
+              <div class="text-[10px] text-slate-400 mt-0.5">เปิดใน Google Sheets</div>
+            </button>
+          </div>
+
+          <input type="file" id="excel-import-file" accept=".xlsx, .xls" class="hidden">
+          <button type="button" onclick="document.getElementById('excel-import-file').click()" class="w-full py-2.5 px-3 rounded-xl surface-elevated hover:border-blue-500/40 text-xs font-semibold flex items-center justify-center gap-2 transition">
+            📥 นำเข้าข้อมูลจากไฟล์ Excel (.xlsx)
+          </button>
+        </div>
+
+        <!-- Section 3: Bank Account Info for Slips -->
+        <div class="space-y-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800 text-xs">
+          <div class="font-bold text-slate-400 uppercase tracking-wider">🏦 ข้อมูลบัญชีรับโอน (แสดงท้ายสลิป)</div>
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">ธนาคาร</label>
+            <input type="text" id="bank-name" placeholder="เช่น ธนาคารกสิกรไทย" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">เลขที่บัญชี</label>
+            <input type="text" id="bank-acc-no" placeholder="เช่น 123-4-56789-0" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">ชื่อบัญชี</label>
+            <input type="text" id="bank-acc-name" placeholder="ชื่อ-นามสกุล" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">พร้อมเพย์ (ถ้ามี)</label>
+            <input type="text" id="bank-promptpay" placeholder="เบอร์โทรศัพท์ / เลขบัตร" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+          <button type="button" onclick="App.savePaymentSettings()" class="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold transition">
+            💾 บันทึกข้อมูลบัญชี
+          </button>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-[11px] text-slate-400">
+        <span>Money Plus v.4 (Midnight OLED)</span>
+        <a href="../index.html" class="text-emerald-400 hover:underline">↩ กลับไปหน้า v.3 เดิม</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 3: + SINGLE / EXTRA STUDENT RECORD ==================== -->
+  <div id="single-record-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="surface-card max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="font-bold text-base">+ เพิ่มคนแทรก / บันทึกเรียนเดี่ยว</h3>
+        <button onclick="App.closeSingleRecordModal()" class="w-8 h-8 rounded-full surface-elevated flex items-center justify-center">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-400 mb-1">ชื่อนักเรียน (พิมพ์ค้นหาหรือพิมพ์ชื่อใหม่)</label>
+          <input type="text" id="single-student-name" list="students-datalist" oninput="App.onSingleStudentInput(this.value)"
+            placeholder="พิมพ์ชื่อนักเรียน..." class="w-full rounded-xl px-3 py-2 border font-bold text-sm">
+          <datalist id="students-datalist"></datalist>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block font-semibold text-slate-400 mb-1">วันที่เรียน</label>
+            <input type="date" id="single-date" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-400 mb-1">ระดับชั้น</label>
+            <input type="text" id="single-grade" placeholder="เช่น ม.4" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block font-semibold text-slate-400 mb-1">กลุ่มเรียน</label>
+            <select id="single-group" class="w-full rounded-xl px-3 py-2 border"></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-400 mb-1">ค่าเรียน (บาท)</label>
+            <input type="number" id="single-amount" value="200" step="25" class="w-full rounded-xl px-3 py-2 border font-bold text-emerald-400">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-400 mb-1">สถานะการชำระเงิน</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" id="single-pay-ค้างจ่าย" onclick="App.setSinglePayMode('ค้างจ่าย')" class="py-2 px-3 rounded-xl text-xs font-bold bg-emerald-500 text-zinc-950">⏳ ค้างจ่าย</button>
+            <button type="button" id="single-pay-เงินโอน" onclick="App.setSinglePayMode('เงินโอน')" class="py-2 px-3 rounded-xl text-xs font-medium surface-elevated">📱 เงินโอน</button>
+            <button type="button" id="single-pay-เงินสด" onclick="App.setSinglePayMode('เงินสด')" class="py-2 px-3 rounded-xl text-xs font-medium surface-elevated">💵 เงินสด</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-100 dark:border-zinc-800 grid grid-cols-2 gap-2">
+        <button type="button" onclick="App.saveSingleRecordModal('add-to-grid')" class="py-2.5 px-3 rounded-xl surface-elevated hover:border-emerald-500/40 text-xs font-bold">
+          + ดึงเข้าตารางเช็คชื่อรอบนี้
+        </button>
+        <button type="button" onclick="App.saveSingleRecordModal('save-now')" class="py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-extrabold">
+          💾 บันทึกรายการทันที
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 4: QUICK 1-TAP PAYMENT METHOD ==================== -->
+  <div id="payment-method-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="surface-card max-w-xs w-full p-5 space-y-4 text-center shadow-2xl">
+      <div>
+        <div class="text-2xl mb-1">💳</div>
+        <h3 class="font-bold text-base">รับชำระค่าเรียน</h3>
+        <p id="pay-modal-student" class="text-sm font-bold text-emerald-400 mt-1"></p>
+        <p id="pay-modal-info" class="text-[11px] text-slate-400"></p>
+        <div id="pay-modal-amount" class="text-xl font-black mt-2">฿0</div>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <button onclick="App.selectPaymentMethod('เงินโอน')" class="p-3 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-400 font-bold text-xs transition">
+          <div class="text-xl mb-1">📱</div>
+          เงินโอน
+        </button>
+        <button onclick="App.selectPaymentMethod('เงินสด')" class="p-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold text-xs transition">
+          <div class="text-xl mb-1">💵</div>
+          เงินสด
+        </button>
+      </div>
+      <button onclick="App.closePaymentMethodModal()" class="text-xs text-slate-400 hover:text-white">ยกเลิก</button>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 5: STUDENT ADD/EDIT (WITH HISTORY CASCADE) ==================== -->
+  <div id="student-dialog-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="surface-card max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-zinc-800">
+        <h3 id="student-modal-title" class="font-bold text-base">จัดการข้อมูลนักเรียน</h3>
+        <button onclick="App.closeStudentModal()" class="w-8 h-8 rounded-full surface-elevated">✕</button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-400 mb-1">ชื่อนักเรียน *</label>
+          <input type="text" id="student-modal-name" class="w-full rounded-xl px-3 py-2 border font-bold text-sm">
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block font-semibold text-slate-400 mb-1">ระดับชั้น</label>
+            <input type="text" id="student-modal-grade" placeholder="เช่น ม.1, ม.4" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-400 mb-1">ค่าเรียนมาตรฐาน (บาท)</label>
+            <input type="number" id="student-modal-fee" value="200" step="25" class="w-full rounded-xl px-3 py-2 border font-bold text-emerald-400">
+          </div>
+        </div>
+        <div id="student-cascade-wrap" class="pt-1">
+          <label class="flex items-center gap-2 cursor-pointer select-none surface-elevated p-2.5 rounded-xl">
+            <input type="checkbox" id="student-cascade-history" checked class="rounded text-emerald-500">
+            <span class="text-[11px] text-slate-600 dark:text-zinc-300">อัปเดตชื่อและระดับชั้นในประวัติการเรียนเดิมทั้งหมดด้วย</span>
+          </label>
+        </div>
+      </div>
+      <div class="pt-2 flex justify-end gap-2">
+        <button onclick="App.closeStudentModal()" class="px-4 py-2 rounded-xl surface-elevated text-xs font-semibold">ยกเลิก</button>
+        <button onclick="App.saveStudentModal()" class="px-5 py-2 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-extrabold">บันทึกข้อมูล</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 6: GROUP ADD ==================== -->
+  <div id="group-dialog-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="surface-card max-w-sm w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="font-bold text-base">เพิ่มกลุ่มรอบเรียน</h3>
+        <button onclick="App.closeGroupModal()" class="w-8 h-8 rounded-full surface-elevated">✕</button>
+      </div>
+      <div class="text-xs">
+        <label class="block font-semibold text-slate-400 mb-1">ชื่อกลุ่มเรียน *</label>
+        <input type="text" id="group-modal-name" placeholder="เช่น วันเสาร์เช้า" class="w-full rounded-xl px-3 py-2 border font-bold">
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="App.closeGroupModal()" class="px-4 py-2 rounded-xl surface-elevated text-xs">ยกเลิก</button>
+        <button onclick="App.saveGroupModal()" class="px-5 py-2 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-extrabold">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 7: EDIT TRANSACTION ==================== -->
+  <div id="edit-tx-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="surface-card max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="font-bold text-base">✏️ แก้ไขรายการบันทึก</h3>
+        <button onclick="App.closeEditModal()" class="w-8 h-8 rounded-full surface-elevated">✕</button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-slate-400 mb-1">วันที่เรียน</label>
+            <input type="date" id="edit-date" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">ชื่อนักเรียน</label>
+            <input type="text" id="edit-student" class="w-full rounded-xl px-3 py-2 border font-bold">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-slate-400 mb-1">ระดับชั้น</label>
+            <input type="text" id="edit-grade" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">กลุ่มเรียน</label>
+            <input type="text" id="edit-group" class="w-full rounded-xl px-3 py-2 border">
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block text-slate-400 mb-1">ค่าเรียน</label>
+            <input type="number" id="edit-amount" step="25" class="w-full rounded-xl px-3 py-2 border font-bold text-emerald-400">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">สถานะ</label>
+            <select id="edit-status" class="w-full rounded-xl px-2.5 py-2 border">
+              <option value="จ่ายแล้ว">จ่ายแล้ว</option>
+              <option value="ค้างจ่าย">ค้างจ่าย</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">ช่องทาง</label>
+            <select id="edit-payment" class="w-full rounded-xl px-2.5 py-2 border">
+              <option value="เงินโอน">เงินโอน</option>
+              <option value="เงินสด">เงินสด</option>
+              <option value="-">-</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="pt-2 flex justify-end gap-2">
+        <button onclick="App.closeEditModal()" class="px-4 py-2 rounded-xl surface-elevated text-xs">ยกเลิก</button>
+        <button onclick="App.saveEditTxModal()" class="px-5 py-2 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-extrabold">บันทึกการแก้ไข</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 8: CALENDAR DAY DETAIL ==================== -->
+  <div id="day-detail-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="surface-card max-w-md w-full p-5 space-y-4 shadow-2xl max-h-[82vh] flex flex-col">
+      <div class="flex items-start justify-between pb-2.5 border-b border-slate-100 dark:border-zinc-800">
+        <div>
+          <h3 id="day-modal-date" class="font-bold text-base">รายละเอียดประจำวัน</h3>
+          <p id="day-modal-summary" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
+        <button onclick="App.closeDayDetailModal()" class="w-8 h-8 rounded-full surface-elevated">✕</button>
+      </div>
+      <div id="day-modal-list" class="space-y-2 overflow-y-auto flex-1 pr-1"></div>
+      <div class="pt-2.5 border-t border-slate-100 dark:border-zinc-800 flex justify-between items-center">
+        <button onclick="App.jumpToQuickRecordForDate()" class="px-4 py-2 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-extrabold">
+          ⚡ เช็คชื่อในวันนี้
+        </button>
+        <button onclick="App.closeDayDetailModal()" class="px-4 py-2 rounded-xl surface-elevated text-xs">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 9: CONFIRM DIALOG ==================== -->
+  <div id="confirm-dialog-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="surface-card max-w-sm w-full p-5 space-y-4 shadow-2xl">
+      <div>
+        <h3 id="confirm-modal-title" class="font-bold text-base">ยืนยันการทำรายการ</h3>
+        <p id="confirm-modal-message" class="text-xs text-slate-400 mt-1.5 leading-relaxed"></p>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="App.closeConfirmModal()" class="px-4 py-2 rounded-xl surface-elevated text-xs font-semibold">ยกเลิก</button>
+        <button id="confirm-modal-action-btn" onclick="App.executeConfirmModalAction()" class="px-4 py-2 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-extrabold">ยืนยัน</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TOAST NOTIFICATION ==================== -->
+  <div id="toast" class="fixed bottom-20 md:bottom-6 right-5 z-50 opacity-0 translate-y-8 pointer-events-none transition-all">
+    <span id="toast-msg">แจ้งเตือน</span>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <script src="./src/data/initialData.js?v=20261120_v4"></script>
+  <script src="./src/js/firebase.js?v=20261120_v4"></script>
+  <script src="./src/js/export.js?v=20261120_v4"></script>
+  <script src="./src/js/slip.js?v=20261120_v4"></script>
+  <script src="./src/js/app.js?v=20261120_v4"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js?v=20261120_v4').then(reg => {
+          try { reg.update(); } catch (e) {}
+        }).catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
