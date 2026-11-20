@@ -11,7 +11,7 @@ window.SlipService = {
 
   getSlipTransactions: function(studentName, allTransactions, mode) {
     const stuTxs = (allTransactions || [])
-      .filter(t => t.studentName === studentName)
+      .filter(t => t.studentName === studentName && t.status !== 'ยกยอด')
       .slice()
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 

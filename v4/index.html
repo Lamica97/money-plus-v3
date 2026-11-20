@@ -237,6 +237,7 @@
             <span class="px-2.5 py-1 rounded-lg surface-elevated font-bold">รวม: <strong id="tx-filter-sum" class="text-emerald-400">฿0</strong></span>
             <span class="px-2.5 py-1 rounded-lg surface-elevated">จ่ายแล้ว: <strong id="tx-filter-paid" class="text-blue-400">฿0</strong></span>
             <span class="px-2.5 py-1 rounded-lg surface-elevated">ค้าง: <strong id="tx-filter-pending" class="amber-high-contrast">฿0</strong></span>
+            <span id="tx-filter-waived-wrap" class="hidden px-2.5 py-1 rounded-lg surface-elevated border-rose-500/30">ยกยอด: <strong id="tx-filter-waived" class="text-rose-400">฿0</strong></span>
           </div>
         </div>
 
@@ -250,6 +251,7 @@
               <button type="button" id="chip-pending" onclick="App.setQuickChip('pending')" class="px-3 py-1 rounded-full text-xs font-medium surface-elevated">⚠️ ค้างจ่าย</button>
               <button type="button" id="chip-transfer" onclick="App.setQuickChip('transfer')" class="px-3 py-1 rounded-full text-xs font-medium surface-elevated">📱 เงินโอน</button>
               <button type="button" id="chip-cash" onclick="App.setQuickChip('cash')" class="px-3 py-1 rounded-full text-xs font-medium surface-elevated">💵 เงินสด</button>
+              <button type="button" id="chip-waived" onclick="App.setQuickChip('waived')" class="px-3 py-1 rounded-full text-xs font-medium surface-elevated">🚫 ยกยอด</button>
             </div>
 
             <!-- Month/Year + Search + Toggle Advanced Filters -->
@@ -555,12 +557,15 @@
             📋 คัดลอกรูป (ส่ง LINE)
           </button>
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <button type="button" onclick="App.copySlipText()" class="py-2 px-3 rounded-xl surface-elevated text-xs font-semibold">
-            💬 คัดลอกข้อความสรุป
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" onclick="App.copySlipText()" class="py-2 px-2.5 rounded-xl surface-elevated text-xs font-semibold">
+            💬 ข้อความสรุป
           </button>
-          <button type="button" onclick="App.markAllPaidForStudent()" class="py-2 px-3 rounded-xl bg-amber-500/15 amber-high-contrast border border-amber-500/30 text-xs font-bold">
-            ✓ ปิดยอดเป็นจ่ายแล้ว
+          <button type="button" onclick="App.markAllPaidForStudent()" class="py-2 px-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold">
+            ✓ ปิดยอดจ่ายแล้ว
+          </button>
+          <button type="button" onclick="App.waiveAllForStudent()" class="py-2 px-2.5 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 text-xs font-bold">
+            🚫 ยกยอดหนี้สูญ
           </button>
         </div>
       </div>
@@ -704,19 +709,25 @@
     <div class="surface-card max-w-xs w-full p-5 space-y-4 text-center shadow-2xl">
       <div>
         <div class="text-2xl mb-1">💳</div>
-        <h3 class="font-bold text-base">รับชำระค่าเรียน</h3>
+        <h3 class="font-bold text-base">จัดการสถานะรายการ</h3>
         <p id="pay-modal-student" class="text-sm font-bold text-emerald-400 mt-1"></p>
         <p id="pay-modal-info" class="text-[11px] text-slate-400"></p>
         <div id="pay-modal-amount" class="text-xl font-black mt-2">฿0</div>
       </div>
-      <div class="grid grid-cols-2 gap-2.5">
+      <div class="grid grid-cols-2 gap-2">
         <button onclick="App.selectPaymentMethod('เงินโอน')" class="p-3 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-400 font-bold text-xs transition">
           <div class="text-xl mb-1">📱</div>
-          เงินโอน
+          รับเงินโอน
         </button>
         <button onclick="App.selectPaymentMethod('เงินสด')" class="p-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold text-xs transition">
           <div class="text-xl mb-1">💵</div>
-          เงินสด
+          รับเงินสด
+        </button>
+        <button onclick="App.selectPaymentMethod('ค้างจ่าย')" class="p-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 amber-high-contrast font-bold text-xs transition">
+          ⏳ ค้างจ่าย
+        </button>
+        <button onclick="App.selectPaymentMethod('ยกยอด')" class="p-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 font-bold text-xs transition">
+          🚫 ยกยอด (หนี้สูญ)
         </button>
       </div>
       <button onclick="App.closePaymentMethodModal()" class="text-xs text-slate-400 hover:text-white">ยกเลิก</button>
@@ -815,6 +826,7 @@
             <select id="edit-status" class="w-full rounded-xl px-2.5 py-2 border">
               <option value="จ่ายแล้ว">จ่ายแล้ว</option>
               <option value="ค้างจ่าย">ค้างจ่าย</option>
+              <option value="ยกยอด">ยกยอด (หนี้สูญ)</option>
             </select>
           </div>
           <div>
@@ -876,15 +888,15 @@
   <!-- Scripts -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-  <script src="./src/data/initialData.js?v=20261120_v4"></script>
-  <script src="./src/js/firebase.js?v=20261120_v4"></script>
-  <script src="./src/js/export.js?v=20261120_v4"></script>
-  <script src="./src/js/slip.js?v=20261120_v4"></script>
-  <script src="./src/js/app.js?v=20261120_v4"></script>
+  <script src="./src/data/initialData.js?v=20261120_v5"></script>
+  <script src="./src/js/firebase.js?v=20261120_v5"></script>
+  <script src="./src/js/export.js?v=20261120_v5"></script>
+  <script src="./src/js/slip.js?v=20261120_v5"></script>
+  <script src="./src/js/app.js?v=20261120_v5"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261120_v4').then(reg => {
+        navigator.serviceWorker.register('./sw.js?v=20261120_v5').then(reg => {
           try { reg.update(); } catch (e) {}
         }).catch(() => {});
       });

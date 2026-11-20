@@ -919,14 +919,19 @@ const App = {
               class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-xl shadow-md shadow-emerald-500/10 transition flex items-center justify-center gap-1.5">
               📸 สร้างใบแจ้งยอด (แสดงวันเรียน + สรุปยอดค้าง)
             </button>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-3 gap-1.5">
               <button type="button" onclick="App.copySlipText(decodeURIComponent('${safeName}'))"
                 class="py-1.5 px-2 surface-elevated hover:border-slate-400 text-slate-600 dark:text-zinc-300 text-[11px] font-semibold rounded-lg transition">
-                💬 คัดลอกข้อความ
+                💬 ข้อความ
               </button>
               <button type="button" onclick="App.markAllPaidForStudent(decodeURIComponent('${safeName}'))"
-                class="py-1.5 px-2 bg-amber-500/15 hover:bg-amber-500/25 amber-high-contrast text-amber-700 border border-amber-500/30 text-[11px] font-bold rounded-lg transition">
-                ✓ ปิดยอดทั้งหมด
+                class="py-1.5 px-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold rounded-lg transition">
+                ✓ ปิดยอด
+              </button>
+              <button type="button" onclick="App.waiveAllForStudent(decodeURIComponent('${safeName}'))"
+                title="ยกยอดทิ้ง / หนี้สูญ (ไม่คิดเป็นรายรับ)"
+                class="py-1.5 px-2 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[11px] font-bold rounded-lg transition">
+                🚫 ยกยอด
               </button>
             </div>
           </div>
@@ -1107,6 +1112,30 @@ const App = {
     });
   },
 
+  waiveAllForStudent: function(studentName) {
+    const targetName = studentName || this.state.slipStudentName;
+    const pending = this.state.transactions.filter(t => t.studentName === targetName && t.status === 'ค้างจ่าย');
+    if (pending.length === 0) return;
+
+    const sum = pending.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    this.openConfirmModal({
+      title: '🚫 ยืนยันการยกยอด (หนี้สูญ)',
+      message: `ต้องการยกยอดค้างชำระทั้งหมดของ "${targetName}" (${pending.length} คาบ รวม ฿${sum.toLocaleString()}) เป็นสถานะ "ยกยอด" ใช่หรือไม่? (จะไม่นำไปรวมเป็นรายรับ และนำออกจากรายการทวงหนี้ แต่ยังดูในหน้าประวัติได้)`,
+      confirmText: '🚫 ยืนยันยกยอด',
+      confirmClass: 'bg-rose-600 hover:bg-rose-700 text-white',
+      onConfirm: () => {
+        pending.forEach(t => {
+          t.status = 'ยกยอด';
+          t.paymentMethod = '-';
+        });
+        this.saveData(false);
+        this.closeSlipModal();
+        this.render();
+        this.showToast(`ยกยอดของ ${targetName} (${pending.length} คาบ) เรียบร้อย`, 'info');
+      }
+    });
+  },
+
   // ==================== 📋 TAB 3: UNIFIED HISTORY & CALENDAR ====================
   setHistoryViewMode: function(mode) {
     this.state.historyViewMode = mode;
@@ -1157,6 +1186,7 @@ const App = {
       if (f.quickChip === 'pending' && t.status !== 'ค้างจ่าย') return false;
       if (f.quickChip === 'transfer' && (t.status !== 'จ่ายแล้ว' || t.paymentMethod !== 'เงินโอน')) return false;
       if (f.quickChip === 'cash' && (t.status !== 'จ่ายแล้ว' || t.paymentMethod !== 'เงินสด')) return false;
+      if (f.quickChip === 'waived' && t.status !== 'ยกยอด') return false;
 
       if (f.search) {
         const q = f.search.toLowerCase();
@@ -1196,21 +1226,29 @@ const App = {
 
   renderTransactionsTable: function() {
     const filtered = this.getFilteredTransactions();
-    const totalAmt = filtered.reduce((s, c) => s + (Number(c.amount) || 0), 0);
     const paidAmt = filtered.filter(t => t.status === 'จ่ายแล้ว').reduce((s, c) => s + (Number(c.amount) || 0), 0);
     const pendAmt = filtered.filter(t => t.status === 'ค้างจ่าย').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const waivedAmt = filtered.filter(t => t.status === 'ยกยอด').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const totalAmt = paidAmt + pendAmt; // Exclude waived bad debt from active revenue sum
 
     const elCount = document.getElementById('tx-filter-count');
     const elSum = document.getElementById('tx-filter-sum');
     const elPaid = document.getElementById('tx-filter-paid');
     const elPend = document.getElementById('tx-filter-pending');
+    const elWaivedWrap = document.getElementById('tx-filter-waived-wrap');
+    const elWaived = document.getElementById('tx-filter-waived');
 
     if (elCount) elCount.textContent = `${filtered.length} รายการ`;
     if (elSum) elSum.textContent = `฿${totalAmt.toLocaleString()}`;
     if (elPaid) elPaid.textContent = `฿${paidAmt.toLocaleString()}`;
     if (elPend) elPend.textContent = `฿${pendAmt.toLocaleString()}`;
+    if (elWaived) elWaived.textContent = `฿${waivedAmt.toLocaleString()}`;
+    if (elWaivedWrap) {
+      if (waivedAmt > 0 || this.state.filter.quickChip === 'waived') elWaivedWrap.classList.remove('hidden');
+      else elWaivedWrap.classList.add('hidden');
+    }
 
-    ['all', 'pending', 'transfer', 'cash'].forEach(c => {
+    ['all', 'pending', 'transfer', 'cash', 'waived'].forEach(c => {
       const btn = document.getElementById('chip-' + c);
       if (btn) {
         if (this.state.filter.quickChip === c) {
@@ -1242,19 +1280,25 @@ const App = {
     } else {
       tbody.innerHTML = pageItems.map((tx, idx) => {
         const isPaid = tx.status === 'จ่ายแล้ว';
+        const isWaived = tx.status === 'ยกยอด';
         return `
-          <tr class="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition border-b border-slate-100 dark:border-zinc-800/60">
+          <tr class="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition border-b border-slate-100 dark:border-zinc-800/60 ${isWaived ? 'opacity-60' : ''}">
             <td class="py-2.5 px-3 text-slate-400 dark:text-zinc-500 font-mono text-[11px]">${startIdx + idx + 1}</td>
             <td class="py-2.5 px-3 whitespace-nowrap font-medium text-slate-700 dark:text-zinc-300">${tx.date}</td>
-            <td class="py-2.5 px-3 whitespace-nowrap font-bold text-slate-900 dark:text-zinc-100">${tx.studentName}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap font-bold text-slate-900 dark:text-zinc-100 ${isWaived ? 'line-through decoration-rose-500/60' : ''}">${tx.studentName}</td>
             <td class="py-2.5 px-3 whitespace-nowrap"><span class="px-2 py-0.5 rounded-md surface-elevated text-[11px] font-medium">${tx.grade || '-'}</span></td>
             <td class="py-2.5 px-3 whitespace-nowrap text-slate-500 dark:text-zinc-400">${tx.group || '-'}</td>
-            <td class="py-2.5 px-3 whitespace-nowrap text-right font-bold ${isPaid ? 'text-emerald-500' : 'amber-high-contrast text-amber-600'}">฿${(Number(tx.amount) || 0).toLocaleString()}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap text-right font-bold ${isPaid ? 'text-emerald-500' : isWaived ? 'text-rose-400 line-through' : 'amber-high-contrast text-amber-600'}">฿${(Number(tx.amount) || 0).toLocaleString()}</td>
             <td class="py-2.5 px-3 whitespace-nowrap text-center">
               ${isPaid ? `
-                <button onclick="App.toggleTxToPending('${tx.id}')" title="คลิกเพื่อสลับเป็นค้างจ่าย"
+                <button onclick="App.openQuickPayModal('${tx.id}')" title="คลิกเพื่อเปลี่ยนสถานะ"
                   class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition">
                   ✓ ${tx.paymentMethod === 'เงินสด' ? 'สด' : 'โอน'}
+                </button>
+              ` : isWaived ? `
+                <button onclick="App.openQuickPayModal('${tx.id}')" title="คลิกเพื่อคืนค่าหรือเปลี่ยนสถานะ"
+                  class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25 transition">
+                  🚫 ยกยอด
                 </button>
               ` : `
                 <button onclick="App.openQuickPayModal('${tx.id}')"
@@ -1298,13 +1342,13 @@ const App = {
     this.renderTransactionsTable();
   },
 
-  // Quick Pay Modal (1-Tap Transfer or Cash)
+  // Quick Pay Modal (1-Tap Transfer, Cash, Waive, or Pending)
   openQuickPayModal: function(txId) {
     const tx = this.state.transactions.find(t => t.id === txId);
     if (!tx) return;
     this.state.payingTxId = txId;
     document.getElementById('pay-modal-student').textContent = tx.studentName;
-    document.getElementById('pay-modal-info').textContent = `${tx.date} · ${tx.group || '-'}`;
+    document.getElementById('pay-modal-info').textContent = `${tx.date} · ${tx.group || '-'} (สถานะปัจจุบัน: ${tx.status})`;
     document.getElementById('pay-modal-amount').textContent = `฿${(Number(tx.amount) || 0).toLocaleString()}`;
     const modal = document.getElementById('payment-method-modal');
     if (modal) modal.classList.remove('hidden');
@@ -1319,11 +1363,21 @@ const App = {
   selectPaymentMethod: function(method) {
     const tx = this.state.transactions.find(t => t.id === this.state.payingTxId);
     if (tx) {
-      tx.status = 'จ่ายแล้ว';
-      tx.paymentMethod = method;
+      if (method === 'ยกยอด') {
+        tx.status = 'ยกยอด';
+        tx.paymentMethod = '-';
+        this.showToast(`ยกยอดรายการของ ${tx.studentName} เรียบร้อย 🚫`, 'info');
+      } else if (method === 'ค้างจ่าย') {
+        tx.status = 'ค้างจ่าย';
+        tx.paymentMethod = '-';
+        this.showToast(`เปลี่ยนรายการของ ${tx.studentName} เป็นค้างจ่าย ⏳`, 'info');
+      } else {
+        tx.status = 'จ่ายแล้ว';
+        tx.paymentMethod = method;
+        this.showToast(`บันทึกการชำระเงิน (${tx.studentName} · ${method}) เรียบร้อย`, 'success');
+      }
       this.saveData(false);
       this.render();
-      this.showToast(`บันทึกการชำระเงิน (${tx.studentName} · ${method}) เรียบร้อย`, 'success');
     }
     this.closePaymentMethodModal();
   },
@@ -1371,7 +1425,7 @@ const App = {
     tx.group = document.getElementById('edit-group').value.trim();
     tx.amount = Number(document.getElementById('edit-amount').value) || 0;
     tx.status = document.getElementById('edit-status').value;
-    tx.paymentMethod = tx.status === 'ค้างจ่าย' ? '-' : document.getElementById('edit-payment').value;
+    tx.paymentMethod = (tx.status === 'ค้างจ่าย' || tx.status === 'ยกยอด') ? '-' : document.getElementById('edit-payment').value;
 
     this.saveData(false);
     this.closeEditModal();
@@ -1521,6 +1575,7 @@ const App = {
 
     const allPaid = this.state.transactions.filter(t => t.status === 'จ่ายแล้ว').reduce((s, c) => s + (Number(c.amount) || 0), 0);
     const periodTxs = this.state.transactions.filter(t => {
+      if (t.status === 'ยกยอด') return false;
       if (y !== 'all' && t.year !== y) return false;
       if (m !== 'all' && t.month !== m) return false;
       return true;
