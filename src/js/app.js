@@ -1,142 +1,215 @@
-// Money Plus v.3 - Core Application Logic with Beautiful Modals & Calendar
-const STORAGE_KEY = 'money_plus_v3_store';
+// Money Plus v.4 - Core Application Controller (100% Real-Time Sync with v.3 Database)
+const STORAGE_KEY_V4 = 'money_plus_v3_data';
+const THEME_KEY_V4 = 'money_plus_v4_theme';
+const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const THAI_MONTHS_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+
+function getThaiMonth(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length < 2) return '';
+  const m = parseInt(parts[1], 10);
+  return (m >= 1 && m <= 12) ? THAI_MONTHS[m - 1] : '';
+}
+
+function getTodayISO() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 const App = {
   state: {
+    activeTab: 'quick-record', // 'quick-record' | 'unpaid' | 'history' | 'dashboard' | 'master'
+    historyViewMode: 'table',  // 'table' | 'calendar'
+    showAdvancedFilters: false,
+
     transactions: [],
     students: [],
     groups: [],
-    activeTab: 'quick-record',
-    // Quick record state
-    recordMode: 'group',
-    recordDate: new Date().toISOString().split('T')[0],
-    recordGrade: 'ม.1',
-    recordGroup: '',
-    sessionStudents: [],
-    // Single record state
-    singleStudentName: '',
-    singleDate: new Date().toISOString().split('T')[0],
-    singleGrade: '',
-    singleGroup: '',
-    singleAmount: 200,
-    singleStatus: 'ค้างจ่าย',
-    singlePayment: '-',
-    // Filter state
-    filter: {
-      search: '',
-      year: 'all',
-      month: 'all',
-      group: 'all',
-      grade: 'all',
-      status: 'all',
-      payment: 'all',
-      quickChip: 'all'
-    },
-    masterGradeFilter: 'all',
-    page: 1,
-    pageSize: 50,
-    // Calendar state
-    calendarYear: 2026,
-    calendarMonth: 8, // 0-indexed (8 = September)
-    // Dashboard filter state
-    dashSelectedYear: '2026',
-    dashSelectedMonth: 'ก.ย.',
-    // Modals state
-    editingTx: null,
-    editingStudentId: null,
-    pendingTxForPayment: null,
-    confirmActionCallback: null,
-    selectedCalendarDate: null,
-    // Unpaid Tracker state
-    unpaidSearch: '',
-    unpaidGradeFilter: 'all',
-    unpaidSort: 'amount-desc',
-    currentSlipStudentName: null,
     paymentSettings: {
       accountName: 'ครูผู้สอน (Money Plus)',
       bankName: 'ธนาคารกสิกรไทย',
-      accountNumber: '123-4-56789-0',
-      promptPay: '089-123-4567',
-      note: 'โอนแล้วรบกวนส่งสลิปยืนยัน ขอบคุณครับ/ค่ะ 🙏'
-    }
+      accountNumber: '',
+      promptPay: ''
+    },
+
+    // Tab 1: Quick Record State
+    recordDate: getTodayISO(),
+    recordGrade: 'ม.4',
+    recordGroup: 'วันจันทร์',
+    sessionStudents: [],
+
+    // Tab 2: Unpaid Tracker & Slip Studio
+    unpaidSearch: '',
+    unpaidGrade: 'all',
+    unpaidSort: 'amount-desc',
+    slipStudentName: null,
+    slipMode: 'active-months',
+    slipShowBank: false,
+
+    // Tab 3: History & Calendar
+    filter: {
+      search: '',
+      year: String(new Date().getFullYear()),
+      month: 'all',
+      group: 'all',
+      grade: 'all',
+      quickChip: 'all' // 'all' | 'pending' | 'transfer' | 'cash'
+    },
+    page: 1,
+    pageSize: 35,
+    calendarYear: new Date().getFullYear(),
+    calendarMonth: new Date().getMonth(),
+    selectedCalendarDate: null,
+
+    // Tab 4: Dashboard
+    dashYear: String(new Date().getFullYear()),
+    dashMonth: THAI_MONTHS[new Date().getMonth()],
+
+    // Tab 5: Master Data
+    masterGradeFilter: 'all',
+    masterSearch: '',
+    editingStudentId: null,
+    editingStudentOriginalName: null,
+
+    // Modals
+    payingTxId: null,
+    editingTxId: null,
+    confirmCallback: null
   },
 
-  charts: {},
+  charts: {
+    trend: null
+  },
 
   init: function() {
     this.initTheme();
     this.loadData();
-    this.setupDateDefaults();
+
+    const now = new Date();
+    const curYear = String(now.getFullYear());
+    const curMonthShort = THAI_MONTHS[now.getMonth()];
+    const hasCurYearTx = this.state.transactions.some(t => t.year === curYear || (t.date && t.date.startsWith(curYear)));
+    const activeYear = hasCurYearTx ? curYear : '2026';
+
+    this.state.dashYear = activeYear;
+    this.state.dashMonth = curMonthShort;
+    this.state.filter.year = 'all';
+    this.state.filter.month = 'all';
+
+    // Default grade & group
+    const dayMap = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+    const todayGroup = dayMap[now.getDay()];
+    if (this.state.groups.some(g => g.name === todayGroup)) {
+      this.state.recordGroup = todayGroup;
+    } else if (this.state.groups.length > 0) {
+      this.state.recordGroup = this.state.groups[0].name;
+    }
+
+    this.populateSessionStudents();
     this.bindEvents();
     this.render();
     this.initFirebase();
   },
 
-  getAvailableGrades: function() {
-    const gradesSet = new Set();
-    this.state.students.forEach(s => {
-      if (s.grade && s.grade.trim()) gradesSet.add(s.grade.trim());
-    });
-    const order = ['ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6', 'ป.6'];
-    const sorted = Array.from(gradesSet).sort((a, b) => {
-      const idxA = order.indexOf(a);
-      const idxB = order.indexOf(b);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return a.localeCompare(b, 'th');
-    });
-    return sorted.length > 0 ? sorted : ['ม.1', 'ม.4', 'ม.5', 'ม.6'];
+  // ==================== 🌙 THEME (DARK MODE DEFAULT) ====================
+  initTheme: function() {
+    const saved = localStorage.getItem(THEME_KEY_V4);
+    // Default to Dark Mode (Midnight OLED) unless explicitly set to 'light'
+    if (saved === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
+    }
+    this.updateThemeUI();
   },
 
+  toggleTheme: function() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem(THEME_KEY_V4, isDark ? 'dark' : 'light');
+    this.updateThemeUI();
+    if (this.state.activeTab === 'dashboard') {
+      this.renderCharts();
+    }
+    this.showToast(isDark ? 'โหมดมืด (Midnight OLED) 🌙' : 'โหมดสว่าง (Light Mode) ☀️', 'info');
+  },
+
+  updateThemeUI: function() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const icon = document.getElementById('theme-toggle-icon');
+    if (icon) icon.textContent = isDark ? '☀️' : '🌙';
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) metaTheme.setAttribute('content', isDark ? '#09090b' : '#059669');
+  },
+
+  // ==================== 💾 DATA & SMART SYNC ====================
   loadData: function() {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(STORAGE_KEY_V4);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        this.state.transactions = parsed.transactions || [];
-        // Normalize any status to ค้างจ่าย
-        this.state.transactions.forEach(t => {
-          if (t.status === 'ค้างชำระ') t.status = 'ค้างจ่าย';
-          if (t.id === 'tx_181' && t.status === 'จ่ายแล้ว' && t.paymentMethod === '-') t.status = 'ค้างจ่าย';
-        });
-        this.state.students = parsed.students || [];
-        this.state.groups = parsed.groups || [];
+        if (parsed.transactions && parsed.transactions.length > 0) {
+          this.state.transactions = parsed.transactions;
+          this.state.students = parsed.students || [];
+          this.state.groups = parsed.groups || [];
+          if (parsed.paymentSettings) {
+            this.state.paymentSettings = Object.assign(this.state.paymentSettings, parsed.paymentSettings);
+          }
+          this.normalizeData();
+          return;
+        }
       } catch (e) {
-        console.error('Failed to parse saved data, fallback to initial data', e);
-        this.loadInitial();
+        console.warn('Error parsing local v4 data:', e);
       }
-    } else {
-      this.loadInitial();
     }
-
-    const savedSettings = localStorage.getItem('money_plus_v3_payment_settings');
-    if (savedSettings) {
+    // Check if v3 local storage exists on same device and migrate automatically
+    const savedV3 = localStorage.getItem('money_plus_v3_data');
+    if (savedV3) {
       try {
-        this.state.paymentSettings = Object.assign(this.state.paymentSettings, JSON.parse(savedSettings));
+        const parsedV3 = JSON.parse(savedV3);
+        if (parsedV3.transactions && parsedV3.transactions.length > 0) {
+          this.state.transactions = parsedV3.transactions;
+          this.state.students = parsedV3.students || [];
+          this.state.groups = parsedV3.groups || [];
+          if (parsedV3.paymentSettings) {
+            this.state.paymentSettings = Object.assign(this.state.paymentSettings, parsedV3.paymentSettings);
+          }
+          this.normalizeData();
+          this.saveData(true);
+          return;
+        }
       } catch (e) {}
     }
-
-    if (this.state.groups.length > 0 && !this.state.recordGroup) {
-      this.state.recordGroup = this.state.groups[0].name;
-    }
-    const availGrades = this.getAvailableGrades();
-    if (!this.state.recordGrade || (!availGrades.includes(this.state.recordGrade) && this.state.recordGrade !== 'all')) {
-      this.state.recordGrade = availGrades[0] || 'ม.1';
-    }
-    this.populateSessionStudents();
+    this.loadInitial();
   },
 
   loadInitial: function() {
-    if (window.INITIAL_MONEY_PLUS_DATA) {
-      this.state.transactions = JSON.parse(JSON.stringify(window.INITIAL_MONEY_PLUS_DATA.transactions));
-      this.state.students = JSON.parse(JSON.stringify(window.INITIAL_MONEY_PLUS_DATA.students));
-      this.state.groups = JSON.parse(JSON.stringify(window.INITIAL_MONEY_PLUS_DATA.groups));
-      this.saveData();
+    if (window.INITIAL_DATA) {
+      this.state.transactions = JSON.parse(JSON.stringify(window.INITIAL_DATA.transactions || []));
+      this.state.students = JSON.parse(JSON.stringify(window.INITIAL_DATA.students || []));
+      this.state.groups = JSON.parse(JSON.stringify(window.INITIAL_DATA.groups || []));
+      if (window.INITIAL_DATA.paymentSettings) {
+        this.state.paymentSettings = Object.assign(this.state.paymentSettings, window.INITIAL_DATA.paymentSettings);
+      }
+      this.normalizeData();
+      this.saveData(true);
     }
   },
 
-  saveData: function() {
+  normalizeData: function() {
+    this.state.transactions.forEach(t => {
+      if (t.status === 'ค้างชำระ') t.status = 'ค้างจ่าย';
+      if (!t.month && t.date) t.month = getThaiMonth(t.date);
+      if (!t.year && t.date) t.year = t.date.split('-')[0];
+    });
+    // Filter out placeholder "ลบด้วย" if present
+    this.state.students = this.state.students.filter(s => s.name && s.name !== 'ลบด้วย');
+  },
+
+  saveData: function(skipCloud = false) {
     const payload = {
       transactions: this.state.transactions,
       students: this.state.students,
@@ -144,127 +217,407 @@ const App = {
       paymentSettings: this.state.paymentSettings,
       lastUpdated: new Date().toISOString()
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    this.updateUnpaidBadge();
+    localStorage.setItem(STORAGE_KEY_V4, JSON.stringify(payload));
+    this.updateUnpaidBadges();
 
-    // Sync to Firebase in background if connected
-    if (window.FirebaseService && window.FirebaseService.db) {
+    if (!skipCloud && window.FirebaseService && window.FirebaseService.db) {
       window.FirebaseService.saveData(payload);
     }
   },
 
-  resetData: function() {
+  initFirebase: function() {
+    if (window.FirebaseService) {
+      window.FirebaseService.init(
+        (cloudData, isCloudEmpty) => this.handleCloudData(cloudData, isCloudEmpty),
+        (status) => this.handleCloudStatus(status)
+      );
+    }
+  },
+
+  handleCloudStatus: function(status) {
+    const isConnected = status && status.connected;
+    const dot = document.getElementById('cloud-status-dot');
+    const text = document.getElementById('cloud-status-text');
+    const drawerStatus = document.getElementById('drawer-cloud-status');
+
+    if (dot) {
+      dot.className = `w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`;
+    }
+    if (text) {
+      text.textContent = isConnected ? 'ซิงก์ v.3 + v.4' : 'ออฟไลน์';
+    }
+    if (drawerStatus) {
+      drawerStatus.textContent = isConnected
+        ? `ซิงก์ฐานข้อมูลเดียวกับ v.3 แบบเรียลไทม์ (${this.state.transactions.length} รายการ)`
+        : 'โหมดออฟไลน์ (บันทึกในเครื่อง)';
+    }
+  },
+
+  handleCloudData: function(cloudData, isCloudEmpty) {
+    if (isCloudEmpty) {
+      this.saveData(false);
+      return;
+    }
+    if (!cloudData || !Array.isArray(cloudData.transactions)) return;
+
+    this.state.transactions = cloudData.transactions;
+    if (Array.isArray(cloudData.students)) this.state.students = cloudData.students;
+    if (Array.isArray(cloudData.groups)) this.state.groups = cloudData.groups;
+    if (cloudData.paymentSettings) {
+      this.state.paymentSettings = Object.assign(this.state.paymentSettings, cloudData.paymentSettings);
+    }
+    this.normalizeData();
+    localStorage.removeItem('money_plus_v4_data');
+    this.saveData(true);
+
+    this.populateSessionStudents();
+    this.render();
+  },
+
+  pullFromV3: async function() {
+    if (!window.FirebaseService || !window.FirebaseService.db) {
+      this.showToast('ไม่สามารถเชื่อมต่อ Firebase ได้ในขณะนี้', 'error');
+      return;
+    }
+    this.showToast('กำลังดึงข้อมูลล่าสุดจาก Money Plus v.3...', 'info');
+    const v3Data = await window.FirebaseService.pullFromV3Cloud();
+    if (!v3Data || !Array.isArray(v3Data.transactions)) {
+      this.showToast('ไม่พบข้อมูลบนโหนด v.3', 'error');
+      return;
+    }
+
     this.openConfirmModal({
-      title: 'รีเซ็ตข้อมูลเริ่มต้น',
-      message: 'คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตข้อมูลทั้งหมดกลับเป็นค่าเริ่มต้นจากไฟล์สำรองข้อมูลเดิม? รายการที่เพิ่มใหม่จะหายไป',
-      confirmText: 'รีเซ็ตข้อมูล',
-      confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
+      title: 'ซิงค์ข้อมูลจาก Money Plus v.3',
+      message: `พบข้อมูลจาก v.3 จำนวน ${v3Data.transactions.length} รายการ (${(v3Data.students || []).length} นักเรียน) ต้องการนำมาอัปเดตเข้าสู่ระบบ v.4 หรือไม่?`,
+      confirmText: '🔄 อัปเดตเข้า v.4',
+      confirmClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
       onConfirm: () => {
-        localStorage.removeItem(STORAGE_KEY);
-        this.loadInitial();
+        this.state.transactions = v3Data.transactions;
+        if (Array.isArray(v3Data.students)) this.state.students = v3Data.students;
+        if (Array.isArray(v3Data.groups)) this.state.groups = v3Data.groups;
+        if (v3Data.paymentSettings) {
+          this.state.paymentSettings = Object.assign(this.state.paymentSettings, v3Data.paymentSettings);
+        }
+        this.normalizeData();
+        this.saveData(false);
+        this.populateSessionStudents();
         this.render();
-        this.showToast('รีเซ็ตข้อมูลกลับเป็นค่าเริ่มต้นเรียบร้อยแล้ว', 'success');
+        this.closeSettingsDrawer();
+        this.showToast(`ดึงข้อมูลจาก v.3 สำเร็จ (${this.state.transactions.length} รายการ) 🎉`, 'success');
       }
     });
   },
 
-  setupDateDefaults: function() {
-    // Default to the latest date from data or today
-    let defaultDate = new Date().toISOString().split('T')[0];
-    if (this.state.transactions.length > 0 && this.state.transactions[0].date) {
-      defaultDate = this.state.transactions[0].date;
-    }
-    this.state.recordDate = defaultDate;
-    this.state.singleDate = defaultDate;
+  // ==================== 🧭 NAVIGATION & TABS ====================
+  switchTab: function(tabId) {
+    this.state.activeTab = tabId;
+    const tabs = ['quick-record', 'unpaid', 'history', 'dashboard', 'master'];
 
-    // Set calendar month/year based on defaultDate
-    const parts = defaultDate.split('-');
-    if (parts.length >= 2) {
-      this.state.calendarYear = parseInt(parts[0], 10);
-      this.state.calendarMonth = parseInt(parts[1], 10) - 1;
-      this.state.dashSelectedYear = parts[0];
-      this.state.dashSelectedMonth = getThaiMonth(defaultDate);
-    }
+    tabs.forEach(t => {
+      const panel = document.getElementById('tab-panel-' + t);
+      const navBtn = document.getElementById('nav-' + t);
+      const mobBtn = document.getElementById('mob-nav-' + t);
+
+      if (panel) {
+        if (t === tabId) panel.classList.remove('hidden');
+        else panel.classList.add('hidden');
+      }
+
+      if (navBtn) {
+        if (t === tabId) {
+          navBtn.className = 'px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 transition flex items-center gap-1.5 whitespace-nowrap';
+        } else {
+          navBtn.className = 'px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition flex items-center gap-1.5 whitespace-nowrap';
+        }
+      }
+
+      if (mobBtn) {
+        if (t === tabId) {
+          mobBtn.className = 'flex flex-col items-center justify-center py-1.5 px-2 text-emerald-400 font-bold transition relative';
+        } else {
+          mobBtn.className = 'flex flex-col items-center justify-center py-1.5 px-2 text-slate-400 dark:text-zinc-500 font-medium transition relative';
+        }
+      }
+    });
+
+    this.render();
+  },
+
+  render: function() {
+    this.updateUnpaidBadges();
+    const tab = this.state.activeTab;
+    if (tab === 'quick-record') this.renderQuickRecord();
+    else if (tab === 'unpaid') this.renderUnpaidTracker();
+    else if (tab === 'history') this.renderHistoryAndCalendar();
+    else if (tab === 'dashboard') this.renderDashboard();
+    else if (tab === 'master') this.renderMaster();
+  },
+
+  updateUnpaidBadges: function() {
+    const pendingTxs = this.state.transactions.filter(t => t.status === 'ค้างจ่าย');
+    const uniqueStudents = new Set(pendingTxs.map(t => t.studentName)).size;
+
+    ['nav-unpaid-badge', 'mob-unpaid-badge'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        if (uniqueStudents > 0) {
+          el.textContent = uniqueStudents;
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
+      }
+    });
+  },
+
+  // ==================== ⚡ TAB 1: QUICK RECORD (PROGRESSIVE DISCLOSURE) ====================
+  getGradeList: function() {
+    const defaultGrades = ['ป.6', 'ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6'];
+    const stuGrades = this.state.students.map(s => (s.grade || '').trim()).filter(Boolean);
+    const merged = Array.from(new Set([...defaultGrades, ...stuGrades]));
+    // Keep only grades that actually have students, plus common ones
+    const activeGrades = merged.filter(g => this.state.students.some(s => (s.grade || '').trim() === g));
+    return activeGrades.length > 0 ? activeGrades : ['ม.1', 'ม.4', 'ม.5', 'ม.6'];
+  },
+
+  populateSessionStudents: function() {
+    const grade = this.state.recordGrade;
+    const filtered = this.state.students.filter(s => {
+      const g = (s.grade || '').trim();
+      if (grade === 'all') return true;
+      if (grade === 'other') return !g;
+      return g === grade;
+    });
+
+    this.state.sessionStudents = filtered.map(s => ({
+      id: s.id,
+      name: s.name,
+      grade: s.grade || '',
+      group: this.state.recordGroup,
+      amount: Number(s.defaultFee) || 200,
+      present: false,
+      payMode: 'ค้างจ่าย' // 'ค้างจ่าย' | 'เงินโอน' | 'เงินสด'
+    }));
+  },
+
+  setRecordGrade: function(grade) {
+    this.state.recordGrade = grade;
+    this.populateSessionStudents();
+    this.renderQuickRecord();
   },
 
   setRecordDateQuick: function(offsetDays) {
     const d = new Date();
     d.setDate(d.getDate() + offsetDays);
-    const dateStr = d.toISOString().split('T')[0];
-    this.state.recordDate = dateStr;
-    const input = document.getElementById('record-date-input');
-    if (input) input.value = dateStr;
-    this.showToast(`เปลี่ยนวันที่เป็น: ${dateStr}`, 'info');
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    this.state.recordDate = `${y}-${m}-${day}`;
+    const dateInput = document.getElementById('record-date-input');
+    if (dateInput) dateInput.value = this.state.recordDate;
+
+    const dayMap = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+    const matchGrp = dayMap[d.getDay()];
+    if (this.state.groups.some(g => g.name === matchGrp)) {
+      this.state.recordGroup = matchGrp;
+      const grpSelect = document.getElementById('record-group-select');
+      if (grpSelect) grpSelect.value = matchGrp;
+    }
   },
 
-  populateSessionStudents: function() {
-    const grade = this.state.recordGrade;
-    const groupName = this.state.recordGroup || (this.state.groups[0]?.name || 'วันอื่น_ๆ');
-    
-    let targetStudents = [];
-    if (!grade || grade === 'all') {
-      targetStudents = this.state.students;
-    } else if (grade === 'other') {
-      const knownGrades = this.getAvailableGrades();
-      targetStudents = this.state.students.filter(s => !s.grade || !knownGrades.includes(s.grade));
-    } else {
-      targetStudents = this.state.students.filter(s => s.grade === grade);
+  renderQuickRecord: function() {
+    const dateInput = document.getElementById('record-date-input');
+    if (dateInput && dateInput.value !== this.state.recordDate) {
+      dateInput.value = this.state.recordDate;
     }
 
-    this.state.sessionStudents = targetStudents.map(s => {
-      const defaultFee = Number(s.defaultFee) || 200;
-      return {
-        name: s.name,
-        grade: s.grade || (grade !== 'all' && grade !== 'other' ? grade : ''),
-        group: groupName,
-        amount: defaultFee,
-        present: false,
-        status: 'ค้างจ่าย',
-        paymentMethod: '-'
-      };
-    });
+    // 1. Render Quick Grade Chips
+    const gradeChipsEl = document.getElementById('record-grade-chips');
+    if (gradeChipsEl) {
+      const grades = this.getGradeList();
+      const chips = [
+        ...grades.map(g => ({ key: g, label: g })),
+        { key: 'all', label: 'ทั้งหมด' }
+      ];
+      gradeChipsEl.innerHTML = chips.map(c => {
+        const active = this.state.recordGrade === c.key;
+        const count = this.state.students.filter(s => c.key === 'all' ? true : (s.grade || '').trim() === c.key).length;
+        return `
+          <button type="button" onclick="App.setRecordGrade('${c.key}')"
+            class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+              active
+                ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20'
+                : 'surface-elevated text-slate-600 dark:text-zinc-300 hover:border-emerald-500/40'
+            }">
+            <span>${c.label}</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full ${active ? 'bg-zinc-950/20 text-zinc-950' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400'}">${count}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    // 2. Render Group Select
+    const grpSelect = document.getElementById('record-group-select');
+    if (grpSelect) {
+      grpSelect.innerHTML = this.state.groups.map(g =>
+        `<option value="${g.name}" ${g.name === this.state.recordGroup ? 'selected' : ''}>${g.name}</option>`
+      ).join('') + `<option value="วันอื่น_ๆ" ${this.state.recordGroup === 'วันอื่น_ๆ' ? 'selected' : ''}>วันอื่น ๆ</option>`;
+    }
+
+    this.renderQuickRecordCards();
   },
 
-  // ----------------- QUICK RECORD ACTIONS -----------------
-  setAllPresent: function(isPresent) {
-    this.state.sessionStudents.forEach(item => {
-      item.present = isPresent;
-    });
-    this.renderQuickRecordList();
-    this.showToast(isPresent ? 'เลือกนักเรียนทุกคนแล้ว' : 'ยกเลิกการเลือกทุกคนแล้ว', 'info');
-  },
+  renderQuickRecordCards: function() {
+    const container = document.getElementById('session-students-list');
+    if (!container) return;
 
-  setGroupPreset: function(type) {
-    this.state.sessionStudents.forEach(item => {
-      item.present = true;
-      if (type === 'paid_transfer') {
-        item.status = 'จ่ายแล้ว';
-        item.paymentMethod = 'เงินโอน';
-      } else if (type === 'paid_cash') {
-        item.status = 'จ่ายแล้ว';
-        item.paymentMethod = 'เงินสด';
-      } else if (type === 'pending') {
-        item.status = 'ค้างจ่าย';
-        item.paymentMethod = '-';
-      }
-    });
-    this.renderQuickRecordList();
-    this.showToast('ตั้งค่าสถานะให้ทุกคนเรียบร้อย', 'info');
-  },
-
-  saveSessionRecords: function() {
-    const activeStudents = this.state.sessionStudents.filter(s => s.present);
-    if (activeStudents.length === 0) {
-      this.showToast('ไม่มีนักเรียนที่เลือก "มาเรียน" ในรอบนี้', 'error');
+    const list = this.state.sessionStudents;
+    if (list.length === 0) {
+      container.innerHTML = `
+        <div class="col-span-full py-12 text-center text-slate-400 dark:text-zinc-500 text-xs">
+          ไม่พบรายชื่อนักเรียนในระดับชั้นนี้ · กดปุ่ม "+ เพิ่มคนแทรก / บันทึกเดี่ยว" ด้านบนได้ครับ
+        </div>
+      `;
+      this.updateQuickRecordSummary();
       return;
     }
 
-    const dateVal = this.state.recordDate;
+    container.innerHTML = list.map((item, idx) => {
+      const isPresent = item.present;
+      const isPending = item.payMode === 'ค้างจ่าย';
+      const isTransfer = item.payMode === 'เงินโอน';
+      const isCash = item.payMode === 'เงินสด';
+
+      return `
+        <div class="rounded-2xl p-3.5 transition-all select-none flex flex-col justify-between ${
+          isPresent ? 'stu-card-active' : 'stu-card-idle'
+        }">
+          <!-- Top Clickable Area: Toggles Attendance -->
+          <div onclick="App.toggleStudentAttendance(${idx})" class="flex items-center justify-between gap-2 cursor-pointer">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition flex-shrink-0 ${
+                isPresent
+                  ? 'bg-emerald-500 text-zinc-950 shadow-sm shadow-emerald-500/30'
+                  : 'border-2 border-slate-300 dark:border-zinc-700 text-transparent'
+              }">
+                ✓
+              </div>
+              <div class="truncate">
+                <div class="font-bold text-sm text-slate-900 dark:text-zinc-100 truncate">${item.name}</div>
+                <div class="text-[10px] text-slate-400 dark:text-zinc-400 font-medium">${item.grade || 'ไม่ระบุชั้น'}</div>
+              </div>
+            </div>
+
+            <!-- Price Badge (When Idle) or Editable Price Input (When Present) -->
+            ${!isPresent ? `
+              <span class="text-xs font-bold text-slate-400 dark:text-zinc-500 whitespace-nowrap">฿${item.amount}</span>
+            ` : `
+              <div onclick="event.stopPropagation()" class="flex items-center bg-slate-100 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-lg px-2 py-0.5">
+                <span class="text-[10px] text-emerald-500 font-bold mr-0.5">฿</span>
+                <input type="number" value="${item.amount}" step="25" min="0"
+                  onchange="App.updateSessionStudentAmount(${idx}, this.value)"
+                  class="w-14 text-right text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-transparent focus:outline-none">
+              </div>
+            `}
+          </div>
+
+          <!-- Progressive Disclosure: 1-Tap Status & Payment Selector (Shown ONLY when present!) -->
+          ${isPresent ? `
+            <div class="mt-3 pt-2.5 border-t border-emerald-500/20 grid grid-cols-3 gap-1.5">
+              <button type="button" onclick="App.setSessionStudentPayMode(${idx}, 'ค้างจ่าย')"
+                class="py-1.5 px-1.5 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 ${
+                  isPending
+                    ? 'bg-amber-500 text-zinc-950 shadow-sm'
+                    : 'bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-400 hover:text-amber-400'
+                }">
+                ⏳ ค้าง
+              </button>
+              <button type="button" onclick="App.setSessionStudentPayMode(${idx}, 'เงินโอน')"
+                class="py-1.5 px-1.5 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 ${
+                  isTransfer
+                    ? 'bg-blue-500 text-white shadow-sm'
+                    : 'bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-400 hover:text-blue-400'
+                }">
+                📱 โอน
+              </button>
+              <button type="button" onclick="App.setSessionStudentPayMode(${idx}, 'เงินสด')"
+                class="py-1.5 px-1.5 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 ${
+                  isCash
+                    ? 'bg-emerald-500 text-zinc-950 shadow-sm'
+                    : 'bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-400 hover:text-emerald-400'
+                }">
+                💵 สด
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+
+    this.updateQuickRecordSummary();
+  },
+
+  toggleStudentAttendance: function(idx) {
+    const item = this.state.sessionStudents[idx];
+    if (!item) return;
+    item.present = !item.present;
+    this.renderQuickRecordCards();
+  },
+
+  setSessionStudentPayMode: function(idx, mode) {
+    const item = this.state.sessionStudents[idx];
+    if (!item) return;
+    item.payMode = mode;
+    this.renderQuickRecordCards();
+  },
+
+  updateSessionStudentAmount: function(idx, val) {
+    const item = this.state.sessionStudents[idx];
+    if (!item) return;
+    item.amount = Number(val) || 0;
+    this.updateQuickRecordSummary();
+  },
+
+  setAllPresent: function(present) {
+    this.state.sessionStudents.forEach(s => s.present = present);
+    this.renderQuickRecordCards();
+  },
+
+  updateQuickRecordSummary: function() {
+    const presentList = this.state.sessionStudents.filter(s => s.present);
+    const count = presentList.length;
+    const total = presentList.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+
+    const countEl = document.getElementById('session-count');
+    const totalEl = document.getElementById('session-total-amount');
+    const saveBtn = document.getElementById('btn-save-session');
+
+    if (countEl) countEl.textContent = `${count} คน`;
+    if (totalEl) totalEl.textContent = `฿${total.toLocaleString()}`;
+    if (saveBtn) {
+      saveBtn.textContent = count > 0 ? `💾 บันทึกการสอน (${count} คน · ฿${total.toLocaleString()})` : '💾 บันทึกการสอน';
+      if (count > 0) {
+        saveBtn.classList.remove('opacity-50');
+      } else {
+        saveBtn.classList.add('opacity-50');
+      }
+    }
+  },
+
+  saveSessionRecords: function() {
+    const presentList = this.state.sessionStudents.filter(s => s.present);
+    if (presentList.length === 0) {
+      this.showToast('กรุณาแตะเลือกนักเรียนที่มาเรียนอย่างน้อย 1 คน', 'error');
+      return;
+    }
+
+    const dateVal = this.state.recordDate || getTodayISO();
     const yearVal = dateVal.split('-')[0];
     const monthVal = getThaiMonth(dateVal);
-    const sessionGroup = this.state.recordGroup || (this.state.groups[0]?.name || 'วันอื่น_ๆ');
+    const sessionGroup = this.state.recordGroup || 'วันอื่น_ๆ';
 
-    const newTxList = activeStudents.map((item, idx) => {
+    const newTxList = presentList.map((item, idx) => {
+      const isPending = item.payMode === 'ค้างจ่าย';
       return {
         id: 'tx_' + Date.now() + '_' + idx,
         seq: this.state.transactions.length + idx + 1,
@@ -275,251 +628,567 @@ const App = {
         grade: item.grade || '',
         studentName: item.name,
         amount: Number(item.amount) || 0,
-        status: item.status,
-        paymentMethod: item.status === 'ค้างจ่าย' ? '-' : item.paymentMethod,
+        status: isPending ? 'ค้างจ่าย' : 'จ่ายแล้ว',
+        paymentMethod: isPending ? '-' : item.payMode,
         firebaseId: 'local_' + Math.random().toString(36).substr(2, 9)
       };
     });
 
     this.state.transactions.unshift(...newTxList);
-    this.saveData();
+    this.saveData(false);
+
+    // Reset attendance selection after saving
+    this.state.sessionStudents.forEach(s => s.present = false);
+    this.renderQuickRecordCards();
 
     const sumAmt = newTxList.reduce((s, c) => s + c.amount, 0);
-    this.showToast(`บันทึกการสอนเรียบร้อย ${newTxList.length} รายการ (รวม ฿${sumAmt.toLocaleString()})`, 'success');
-    this.switchTab('transactions');
+    this.showToast(`บันทึกเรียบร้อย ${newTxList.length} คน (รวม ฿${sumAmt.toLocaleString()}) 🎉`, 'success');
   },
 
-  saveSingleRecord: function() {
-    const name = (this.state.singleStudentName || '').trim();
-    if (!name) {
-      this.showToast('กรุณาระบุชื่อนักเรียน', 'error');
-      return;
+  // Single / Extra Student Modal
+  openSingleRecordModal: function() {
+    document.getElementById('single-student-name').value = '';
+    document.getElementById('single-date').value = this.state.recordDate || getTodayISO();
+    document.getElementById('single-grade').value = this.state.recordGrade !== 'all' ? this.state.recordGrade : 'ม.4';
+    document.getElementById('single-amount').value = 200;
+
+    const grpSelect = document.getElementById('single-group');
+    if (grpSelect) {
+      grpSelect.innerHTML = this.state.groups.map(g =>
+        `<option value="${g.name}" ${g.name === this.state.recordGroup ? 'selected' : ''}>${g.name}</option>`
+      ).join('') + `<option value="วันอื่น_ๆ">วันอื่น ๆ</option>`;
     }
 
-    const dateVal = this.state.singleDate;
-    const yearVal = dateVal.split('-')[0];
-    const monthVal = getThaiMonth(dateVal);
-
-    const newTx = {
-      id: 'tx_' + Date.now(),
-      seq: this.state.transactions.length + 1,
-      date: dateVal,
-      year: yearVal,
-      month: monthVal,
-      group: this.state.singleGroup || 'วันอื่น_ๆ',
-      grade: this.state.singleGrade || '',
-      studentName: name,
-      amount: Number(this.state.singleAmount) || 0,
-      status: this.state.singleStatus,
-      paymentMethod: this.state.singleStatus === 'ค้างจ่าย' ? '-' : this.state.singlePayment,
-      firebaseId: 'local_' + Math.random().toString(36).substr(2, 9)
-    };
-
-    const existing = this.state.students.find(s => s.name === name);
-    if (!existing) {
-      this.state.students.push({
-        id: 'stu_' + Date.now(),
-        name: name,
-        grade: this.state.singleGrade || '',
-        group: this.state.singleGroup || '',
-        defaultFee: Number(this.state.singleAmount) || 200
-      });
+    // Populate datalist for autocomplete
+    const dataList = document.getElementById('students-datalist');
+    if (dataList) {
+      dataList.innerHTML = this.state.students.map(s => `<option value="${s.name}">${s.grade || ''}</option>`).join('');
     }
 
-    this.state.transactions.unshift(newTx);
-    this.saveData();
-    this.showToast(`บันทึกรายการของ ${name} เรียบร้อย`, 'success');
-    this.state.singleStudentName = '';
-    const singleInput = document.getElementById('single-student-name');
-    if (singleInput) singleInput.value = '';
-    this.switchTab('transactions');
-  },
-
-  // ----------------- BEAUTIFUL PAYMENT MODAL -----------------
-  openPaymentMethodModal: function(txId) {
-    const tx = this.state.transactions.find(t => t.id === txId);
-    if (!tx) return;
-    this.state.pendingTxForPayment = tx;
-
-    document.getElementById('pay-modal-student').textContent = tx.studentName;
-    document.getElementById('pay-modal-info').textContent = `วันที่ ${tx.date} · กลุ่ม ${tx.group || '-'}`;
-    document.getElementById('pay-modal-amount').textContent = `฿${(Number(tx.amount) || 0).toLocaleString()}`;
-
-    const modal = document.getElementById('payment-method-modal');
+    this.setSinglePayMode('ค้างจ่าย');
+    const modal = document.getElementById('single-record-modal');
     if (modal) modal.classList.remove('hidden');
   },
 
-  selectPaymentMethod: function(method) {
-    if (!this.state.pendingTxForPayment) return;
-    const tx = this.state.pendingTxForPayment;
-    tx.status = 'จ่ายแล้ว';
-    tx.paymentMethod = method;
-    this.saveData();
-
-    this.closePaymentMethodModal();
-    this.renderTransactions();
-    this.renderDashboard();
-    if (this.state.activeTab === 'calendar') this.renderCalendar();
-    this.showToast(`อัปเดต "${tx.studentName}" เป็นจ่ายแล้ว (${method}) เรียบร้อย!`, 'success');
-  },
-
-  closePaymentMethodModal: function() {
-    this.state.pendingTxForPayment = null;
-    const modal = document.getElementById('payment-method-modal');
+  closeSingleRecordModal: function() {
+    const modal = document.getElementById('single-record-modal');
     if (modal) modal.classList.add('hidden');
   },
 
-  // ----------------- BEAUTIFUL CONFIRM MODAL -----------------
-  openConfirmModal: function({ title, message, confirmText, confirmClass, onConfirm }) {
-    document.getElementById('confirm-modal-title').textContent = title || 'ยืนยันการทำรายการ';
-    document.getElementById('confirm-modal-message').textContent = message || '';
-    
-    const confirmBtn = document.getElementById('confirm-modal-action-btn');
-    confirmBtn.textContent = confirmText || 'ยืนยัน';
-    confirmBtn.className = `px-4 py-2 text-xs font-bold rounded-lg shadow-sm transition ${confirmClass || 'bg-emerald-600 hover:bg-emerald-700 text-white'}`;
-    
-    this.state.confirmActionCallback = onConfirm;
-
-    const modal = document.getElementById('confirm-dialog-modal');
-    if (modal) modal.classList.remove('hidden');
-  },
-
-  executeConfirmModalAction: function() {
-    if (this.state.confirmActionCallback) {
-      this.state.confirmActionCallback();
+  onSingleStudentInput: function(val) {
+    const match = this.state.students.find(s => s.name.toLowerCase() === val.trim().toLowerCase());
+    if (match) {
+      document.getElementById('single-grade').value = match.grade || '';
+      document.getElementById('single-amount').value = match.defaultFee || 200;
     }
-    this.closeConfirmModal();
   },
 
-  closeConfirmModal: function() {
-    this.state.confirmActionCallback = null;
-    const modal = document.getElementById('confirm-dialog-modal');
-    if (modal) modal.classList.add('hidden');
-  },
-
-  // ----------------- TABLE ACTIONS -----------------
-  deleteTransaction: function(txId) {
-    const tx = this.state.transactions.find(t => t.id === txId);
-    if (!tx) return;
-
-    this.openConfirmModal({
-      title: 'ยืนยันการลบรายการ',
-      message: `คุณต้องการลบรายการของ "${tx.studentName}" (วันที่ ${tx.date}, ยอด ฿${tx.amount}) ออกจากระบบใช่หรือไม่?`,
-      confirmText: 'ลบรายการ',
-      confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
-      onConfirm: () => {
-        this.state.transactions = this.state.transactions.filter(t => t.id !== txId);
-        this.saveData();
-        this.renderTransactions();
-        this.renderDashboard();
-        if (this.state.activeTab === 'calendar') this.renderCalendar();
-        this.showToast('ลบรายการเรียบร้อย', 'info');
+  setSinglePayMode: function(mode) {
+    this.state.singlePayMode = mode;
+    ['ค้างจ่าย', 'เงินโอน', 'เงินสด'].forEach(m => {
+      const btn = document.getElementById('single-pay-' + m);
+      if (btn) {
+        if (m === mode) {
+          btn.className = 'py-2 px-3 rounded-xl text-xs font-bold bg-emerald-500 text-zinc-950 shadow-sm transition';
+        } else {
+          btn.className = 'py-2 px-3 rounded-xl text-xs font-medium surface-elevated text-slate-500 dark:text-zinc-400 transition';
+        }
       }
     });
   },
 
-  openEditModal: function(txId) {
-    const tx = this.state.transactions.find(t => t.id === txId);
-    if (!tx) return;
-    this.state.editingTx = { ...tx };
-    this.renderEditModal();
-  },
-
-  saveEditedTransaction: function() {
-    if (!this.state.editingTx) return;
-    const idx = this.state.transactions.findIndex(t => t.id === this.state.editingTx.id);
-    if (idx !== -1) {
-      const tx = this.state.editingTx;
-      tx.date = document.getElementById('edit-date').value;
-      tx.studentName = document.getElementById('edit-student').value;
-      tx.grade = document.getElementById('edit-grade').value;
-      tx.group = document.getElementById('edit-group').value;
-      tx.amount = Number(document.getElementById('edit-amount').value) || 0;
-      tx.status = document.getElementById('edit-status').value;
-      tx.paymentMethod = tx.status === 'ค้างจ่าย' ? '-' : document.getElementById('edit-payment').value;
-      tx.year = tx.date ? tx.date.split('-')[0] : tx.year;
-      tx.month = tx.date ? getThaiMonth(tx.date) : tx.month;
-      
-      this.state.transactions[idx] = tx;
-      this.saveData();
-      this.closeEditModal();
-      this.renderTransactions();
-      this.renderDashboard();
-      if (this.state.activeTab === 'calendar') this.renderCalendar();
-      this.showToast('แก้ไขข้อมูลรายการเรียบร้อย', 'success');
+  saveSingleRecordModal: function(mode) {
+    const name = document.getElementById('single-student-name').value.trim();
+    if (!name) {
+      this.showToast('กรุณาระบุชื่อนักเรียน', 'error');
+      return;
     }
+    const dateVal = document.getElementById('single-date').value || getTodayISO();
+    const gradeVal = document.getElementById('single-grade').value.trim();
+    const groupVal = document.getElementById('single-group').value || 'วันอื่น_ๆ';
+    const amountVal = Number(document.getElementById('single-amount').value) || 200;
+    const payMode = this.state.singlePayMode || 'ค้างจ่าย';
+
+    // Ensure student exists in master list
+    if (!this.state.students.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+      this.state.students.push({
+        id: 'stu_' + Date.now(),
+        name: name,
+        grade: gradeVal,
+        group: groupVal,
+        defaultFee: amountVal
+      });
+    }
+
+    if (mode === 'add-to-grid') {
+      // Just add to current session attendance grid
+      this.state.sessionStudents.unshift({
+        id: 'stu_' + Date.now(),
+        name: name,
+        grade: gradeVal,
+        group: groupVal,
+        amount: amountVal,
+        present: true,
+        payMode: payMode
+      });
+      this.closeSingleRecordModal();
+      this.renderQuickRecordCards();
+      this.showToast(`เพิ่ม "${name}" เข้าในรอบเช็คชื่อนี้แล้ว`, 'info');
+      return;
+    }
+
+    // Immediately save transaction
+    const isPending = payMode === 'ค้างจ่าย';
+    const newTx = {
+      id: 'tx_' + Date.now(),
+      seq: this.state.transactions.length + 1,
+      date: dateVal,
+      year: dateVal.split('-')[0],
+      month: getThaiMonth(dateVal),
+      group: groupVal,
+      grade: gradeVal,
+      studentName: name,
+      amount: amountVal,
+      status: isPending ? 'ค้างจ่าย' : 'จ่ายแล้ว',
+      paymentMethod: isPending ? '-' : payMode,
+      firebaseId: 'local_' + Math.random().toString(36).substr(2, 9)
+    };
+
+    this.state.transactions.unshift(newTx);
+    this.saveData(false);
+    this.closeSingleRecordModal();
+    this.render();
+    this.showToast(`บันทึก "${name}" (฿${amountVal.toLocaleString()}) เรียบร้อย 🎉`, 'success');
   },
 
-  closeEditModal: function() {
-    this.state.editingTx = null;
-    const modal = document.getElementById('edit-tx-modal');
+  // ==================== ⚠️ TAB 2: UNPAID TRACKER & SLIP STUDIO ====================
+  getUnpaidStudentsData: function() {
+    const pendingTxs = this.state.transactions.filter(t => t.status === 'ค้างจ่าย');
+    const map = {};
+
+    pendingTxs.forEach(tx => {
+      const name = tx.studentName || 'ไม่ระบุชื่อ';
+      if (!map[name]) {
+        const profile = this.state.students.find(s => s.name === name);
+        map[name] = {
+          name: name,
+          grade: tx.grade || (profile ? profile.grade : '') || '-',
+          group: tx.group || (profile ? profile.group : '') || '-',
+          totalAmount: 0,
+          transactions: []
+        };
+      }
+      map[name].totalAmount += (Number(tx.amount) || 0);
+      map[name].transactions.push(tx);
+    });
+
+    let studentList = Object.values(map);
+    studentList.forEach(st => {
+      st.transactions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    });
+
+    return {
+      studentList,
+      totalStudents: studentList.length,
+      totalSessions: pendingTxs.length,
+      totalAmount: pendingTxs.reduce((s, c) => s + (Number(c.amount) || 0), 0)
+    };
+  },
+
+  renderUnpaidTracker: function() {
+    const { studentList, totalStudents, totalSessions, totalAmount } = this.getUnpaidStudentsData();
+
+    const elStu = document.getElementById('unpaid-stat-students');
+    const elSes = document.getElementById('unpaid-stat-sessions');
+    const elAmt = document.getElementById('unpaid-stat-amount');
+    if (elStu) elStu.textContent = `${totalStudents} คน`;
+    if (elSes) elSes.textContent = `${totalSessions} คาบ`;
+    if (elAmt) elAmt.textContent = `฿${totalAmount.toLocaleString()}`;
+
+    // Grade Chips
+    const grades = ['all', ...Array.from(new Set(studentList.map(s => s.grade).filter(g => g && g !== '-')))];
+    const chipContainer = document.getElementById('unpaid-grade-chips');
+    if (chipContainer) {
+      chipContainer.innerHTML = grades.map(g => {
+        const active = this.state.unpaidGrade === g;
+        return `
+          <button type="button" onclick="App.setUnpaidGrade('${g}')"
+            class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+              active
+                ? 'bg-amber-500 text-zinc-950'
+                : 'surface-elevated text-slate-500 dark:text-zinc-400'
+            }">
+            ${g === 'all' ? 'ทุกชั้น' : g}
+          </button>
+        `;
+      }).join('');
+    }
+
+    let filtered = studentList.filter(s => {
+      if (this.state.unpaidGrade !== 'all' && s.grade !== this.state.unpaidGrade) return false;
+      if (this.state.unpaidSearch) {
+        return s.name.toLowerCase().includes(this.state.unpaidSearch.toLowerCase());
+      }
+      return true;
+    });
+
+    const sort = this.state.unpaidSort;
+    filtered.sort((a, b) => {
+      if (sort === 'amount-desc') return b.totalAmount - a.totalAmount;
+      if (sort === 'amount-asc') return a.totalAmount - b.totalAmount;
+      if (sort === 'count-desc') return b.transactions.length - a.transactions.length;
+      return a.name.localeCompare(b.name, 'th');
+    });
+
+    const grid = document.getElementById('unpaid-students-grid');
+    if (!grid) return;
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `
+        <div class="col-span-full surface-card p-12 text-center text-slate-400 dark:text-zinc-500 text-sm">
+          🎉 ไม่มีรายการค้างชำระในหมวดที่เลือก
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = filtered.map(st => {
+      const safeName = encodeURIComponent(st.name);
+      // Count total paid sessions in active months for context
+      const allStuTxs = this.state.transactions.filter(t => t.studentName === st.name);
+      const paidCount = allStuTxs.filter(t => t.status === 'จ่ายแล้ว').length;
+
+      return `
+        <div class="surface-card p-4 flex flex-col justify-between space-y-3 hover:border-amber-500/40 transition">
+          <div>
+            <!-- Student Header -->
+            <div class="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-zinc-800">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="font-bold text-base text-slate-900 dark:text-zinc-100">${st.name}</h3>
+                  <span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">${st.grade}</span>
+                </div>
+                <p class="text-[11px] text-slate-400 dark:text-zinc-400 mt-0.5">
+                  ค้างชำระ <strong class="amber-high-contrast text-amber-600">${st.transactions.length} คาบ</strong> · (จ่ายแล้วสะสม ${paidCount} คาบ)
+                </p>
+              </div>
+              <div class="text-right">
+                <div class="text-lg font-black amber-high-contrast text-amber-600">฿${st.totalAmount.toLocaleString()}</div>
+                <div class="text-[10px] text-slate-400">ยอดค้างรวม</div>
+              </div>
+            </div>
+
+            <!-- Unpaid Sessions List with Individual 1-Click Pay -->
+            <div class="mt-2.5 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              ${st.transactions.map(tx => `
+                <div class="flex items-center justify-between text-xs py-1 px-2 rounded-lg surface-elevated">
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium text-slate-700 dark:text-zinc-200">${tx.date}</span>
+                    <span class="text-[10px] text-slate-400">(${tx.group || '-'})</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold amber-high-contrast text-amber-600">฿${(Number(tx.amount) || 0).toLocaleString()}</span>
+                    <button type="button" onclick="App.openQuickPayModal('${tx.id}')"
+                      title="รับชำระเฉพาะคาบนี้"
+                      class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 transition">
+                      ✓ รับเงิน
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="pt-2.5 border-t border-slate-100 dark:border-zinc-800 space-y-2">
+            <button type="button" onclick="App.openSlipModal(decodeURIComponent('${safeName}'))"
+              class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-xl shadow-md shadow-emerald-500/10 transition flex items-center justify-center gap-1.5">
+              📸 สร้างใบแจ้งยอด (แสดงวันเรียน + สรุปยอดค้าง)
+            </button>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button type="button" onclick="App.copySlipText(decodeURIComponent('${safeName}'))"
+                class="py-1.5 px-2 surface-elevated hover:border-slate-400 text-slate-600 dark:text-zinc-300 text-[11px] font-semibold rounded-lg transition">
+                💬 ข้อความ
+              </button>
+              <button type="button" onclick="App.markAllPaidForStudent(decodeURIComponent('${safeName}'))"
+                class="py-1.5 px-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold rounded-lg transition">
+                ✓ ปิดยอด
+              </button>
+              <button type="button" onclick="App.waiveAllForStudent(decodeURIComponent('${safeName}'))"
+                title="ยกยอดทิ้ง / หนี้สูญ (ไม่คิดเป็นรายรับ)"
+                class="py-1.5 px-2 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[11px] font-bold rounded-lg transition">
+                🚫 ยกยอด
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  setUnpaidGrade: function(g) {
+    this.state.unpaidGrade = g;
+    this.renderUnpaidTracker();
+  },
+
+  openSlipModal: function(studentName) {
+    this.state.slipStudentName = studentName;
+    this.renderSlipPreview();
+    const modal = document.getElementById('slip-modal');
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closeSlipModal: function() {
+    const modal = document.getElementById('slip-modal');
     if (modal) modal.classList.add('hidden');
+    this.state.slipStudentName = null;
   },
 
-  // ----------------- FILTERING LOGIC -----------------
+  setSlipMode: function(mode) {
+    this.state.slipMode = mode;
+    ['active-months', 'unpaid-only', 'recent-12'].forEach(m => {
+      const btn = document.getElementById('slip-mode-' + m);
+      if (btn) {
+        if (m === mode) {
+          btn.className = 'px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-500 text-zinc-950 transition';
+        } else {
+          btn.className = 'px-2.5 py-1.5 rounded-lg text-[11px] font-medium surface-elevated text-slate-500 dark:text-zinc-400 transition';
+        }
+      }
+    });
+    this.renderSlipPreview();
+  },
+
+  toggleSlipBankInfo: function(checked) {
+    this.state.slipShowBank = checked;
+    this.renderSlipPreview();
+  },
+
+  renderSlipPreview: function() {
+    const name = this.state.slipStudentName;
+    if (!name || !window.SlipService) return;
+
+    const { studentList } = this.getUnpaidStudentsData();
+    let st = studentList.find(s => s.name === name);
+    if (!st) {
+      const profile = this.state.students.find(s => s.name === name);
+      st = {
+        name: name,
+        grade: profile ? profile.grade : '-',
+        group: profile ? profile.group : '-',
+        totalAmount: 0,
+        transactions: []
+      };
+    }
+
+    window.SlipService.renderCanvas({
+      canvas: document.getElementById('slip-canvas'),
+      previewImg: document.getElementById('slip-preview-img'),
+      student: st,
+      allTransactions: this.state.transactions,
+      mode: this.state.slipMode,
+      paymentSettings: this.state.paymentSettings,
+      showBankInfo: this.state.slipShowBank
+    });
+  },
+
+  downloadSlipImage: function() {
+    const canvas = document.getElementById('slip-canvas');
+    if (!canvas || !window.SlipService) return;
+    const studentName = this.state.slipStudentName || 'นักเรียน';
+    const filename = `ใบแจ้งยอด_${studentName}.png`;
+
+    const file = window.SlipService.currentFile;
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({
+        files: [file],
+        title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
+        text: `สรุปประวัติการเรียนและยอดค้างชำระของ ${studentName}`
+      }).then(() => {
+        this.showToast('แชร์/บันทึกรูปภาพเรียบร้อย 🎉', 'success');
+      }).catch(err => {
+        if (err.name !== 'AbortError') this.fallbackDownloadSlip(canvas, filename);
+      });
+      return;
+    }
+    this.fallbackDownloadSlip(canvas, filename);
+  },
+
+  fallbackDownloadSlip: function(canvas, filename) {
+    const dataUrl = window.SlipService.currentDataUrl || canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => document.body.removeChild(link), 1000);
+    this.showToast('ดาวน์โหลดรูปภาพเรียบร้อย', 'success');
+  },
+
+  copySlipImage: function() {
+    const canvas = document.getElementById('slip-canvas');
+    if (!canvas) return;
+    const isTouch = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isTouch && window.SlipService && window.SlipService.currentFile && navigator.canShare && navigator.canShare({ files: [window.SlipService.currentFile] })) {
+      this.downloadSlipImage();
+      return;
+    }
+
+    if (navigator.clipboard && window.ClipboardItem && canvas.toBlob) {
+      canvas.toBlob(blob => {
+        if (!blob) return this.downloadSlipImage();
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+          .then(() => this.showToast('คัดลอกรูปภาพแล้ว! กดวาง (Ctrl+V) ใน LINE ได้เลย', 'success'))
+          .catch(() => this.downloadSlipImage());
+      }, 'image/png');
+    } else {
+      this.downloadSlipImage();
+    }
+  },
+
+  copySlipText: function(studentName) {
+    const targetName = studentName || this.state.slipStudentName;
+    if (!targetName) return;
+
+    const displayTxs = window.SlipService.getSlipTransactions(targetName, this.state.transactions, this.state.slipMode);
+    const unpaidTxs = displayTxs.filter(t => t.status === 'ค้างจ่าย');
+    const paidTxs = displayTxs.filter(t => t.status === 'จ่ายแล้ว');
+    const unpaidSum = unpaidTxs.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+
+    let text = `📢 สรุปประวัติการเรียนและแจ้งยอดค่าเรียน\n`;
+    text += `นักเรียน: ${targetName}\n`;
+    text += `------------------------------------\n`;
+    displayTxs.forEach((tx, idx) => {
+      const badge = tx.status === 'จ่ายแล้ว' ? '✓ จ่ายแล้ว' : '⏳ ค้างจ่าย';
+      text += `${idx + 1}. ${tx.date} (${tx.group}): ฿${(Number(tx.amount) || 0).toLocaleString()} [${badge}]\n`;
+    });
+    text += `------------------------------------\n`;
+    text += `รวมเรียน: ${displayTxs.length} คาบ (ชำระแล้ว ${paidTxs.length} คาบ / ค้างชำระ ${unpaidTxs.length} คาบ)\n`;
+    text += `💰 ยอดค้างชำระที่ต้องโอนทั้งสิ้น: ฿${unpaidSum.toLocaleString()} บาท\n`;
+    text += `ขอบพระคุณผู้ปกครองครับ/ค่ะ 🙏`;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        this.showToast(`คัดลอกข้อความแจ้งยอดของ ${targetName} แล้ว`, 'success');
+      });
+    }
+  },
+
+  markAllPaidForStudent: function(studentName) {
+    const targetName = studentName || this.state.slipStudentName;
+    const pending = this.state.transactions.filter(t => t.studentName === targetName && t.status === 'ค้างจ่าย');
+    if (pending.length === 0) return;
+
+    const sum = pending.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    this.openConfirmModal({
+      title: 'ยืนยันการปิดยอดชำระทั้งหมด',
+      message: `ต้องการเปลี่ยนสถานะค้างจ่ายทั้งหมดของ "${targetName}" (${pending.length} คาบ รวม ฿${sum.toLocaleString()}) เป็น "จ่ายแล้ว (เงินโอน)" ใช่หรือไม่?`,
+      confirmText: '✓ ยืนยันรับชำระแล้ว',
+      confirmClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+      onConfirm: () => {
+        pending.forEach(t => {
+          t.status = 'จ่ายแล้ว';
+          if (!t.paymentMethod || t.paymentMethod === '-') t.paymentMethod = 'เงินโอน';
+        });
+        this.saveData(false);
+        this.closeSlipModal();
+        this.render();
+        this.showToast(`ปิดยอดชำระของ ${targetName} เรียบร้อย 🎉`, 'success');
+      }
+    });
+  },
+
+  waiveAllForStudent: function(studentName) {
+    const targetName = studentName || this.state.slipStudentName;
+    const pending = this.state.transactions.filter(t => t.studentName === targetName && t.status === 'ค้างจ่าย');
+    if (pending.length === 0) return;
+
+    const sum = pending.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    this.openConfirmModal({
+      title: '🚫 ยืนยันการยกยอด (หนี้สูญ)',
+      message: `ต้องการยกยอดค้างชำระทั้งหมดของ "${targetName}" (${pending.length} คาบ รวม ฿${sum.toLocaleString()}) เป็นสถานะ "ยกยอด" ใช่หรือไม่? (จะไม่นำไปรวมเป็นรายรับ และนำออกจากรายการทวงหนี้ แต่ยังดูในหน้าประวัติได้)`,
+      confirmText: '🚫 ยืนยันยกยอด',
+      confirmClass: 'bg-rose-600 hover:bg-rose-700 text-white',
+      onConfirm: () => {
+        pending.forEach(t => {
+          t.status = 'ยกยอด';
+          t.paymentMethod = '-';
+        });
+        this.saveData(false);
+        this.closeSlipModal();
+        this.render();
+        this.showToast(`ยกยอดของ ${targetName} (${pending.length} คาบ) เรียบร้อย`, 'info');
+      }
+    });
+  },
+
+  // ==================== 📋 TAB 3: UNIFIED HISTORY & CALENDAR ====================
+  setHistoryViewMode: function(mode) {
+    this.state.historyViewMode = mode;
+    const btnTable = document.getElementById('btn-view-table');
+    const btnCal = document.getElementById('btn-view-calendar');
+    const secTable = document.getElementById('history-table-section');
+    const secCal = document.getElementById('history-calendar-section');
+
+    if (mode === 'table') {
+      if (secTable) secTable.classList.remove('hidden');
+      if (secCal) secCal.classList.add('hidden');
+      if (btnTable) btnTable.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-zinc-950 shadow-sm transition';
+      if (btnCal) btnCal.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-zinc-400 transition';
+    } else {
+      if (secTable) secTable.classList.add('hidden');
+      if (secCal) secCal.classList.remove('hidden');
+      if (btnCal) btnCal.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-zinc-950 shadow-sm transition';
+      if (btnTable) btnTable.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-zinc-400 transition';
+    }
+    this.renderHistoryAndCalendar();
+  },
+
+  toggleAdvancedFilters: function() {
+    this.state.showAdvancedFilters = !this.state.showAdvancedFilters;
+    const panel = document.getElementById('advanced-filters-panel');
+    if (panel) {
+      if (this.state.showAdvancedFilters) panel.classList.remove('hidden');
+      else panel.classList.add('hidden');
+    }
+  },
+
+  renderHistoryAndCalendar: function() {
+    if (this.state.historyViewMode === 'calendar') {
+      this.renderCalendar();
+    } else {
+      this.renderTransactionsTable();
+    }
+  },
+
   getFilteredTransactions: function() {
-    let list = [...this.state.transactions];
     const f = this.state.filter;
+    return this.state.transactions.filter(t => {
+      if (f.year !== 'all' && t.year !== f.year) return false;
+      if (f.month !== 'all' && t.month !== f.month) return false;
+      if (f.group !== 'all' && t.group !== f.group) return false;
+      if (f.grade !== 'all' && t.grade !== f.grade) return false;
 
-    if (f.quickChip === 'pending') {
-      list = list.filter(t => t.status === 'ค้างจ่าย');
-    } else if (f.quickChip === 'current_month') {
-      const now = new Date();
-      const currentYear = String(now.getFullYear());
-      const currentMonth = getThaiMonth(now.toISOString().split('T')[0]);
-      list = list.filter(t => (t.year === currentYear || (t.date && t.date.startsWith(currentYear))) && t.month === currentMonth);
-    } else if (f.quickChip === 'last_month') {
-      const now = new Date();
-      now.setMonth(now.getMonth() - 1);
-      const lastYear = String(now.getFullYear());
-      const lastMonth = getThaiMonth(now.toISOString().split('T')[0]);
-      list = list.filter(t => (t.year === lastYear || (t.date && t.date.startsWith(lastYear))) && t.month === lastMonth);
-    } else if (f.quickChip === 'transfer') {
-      list = list.filter(t => t.paymentMethod === 'เงินโอน');
-    } else if (f.quickChip === 'cash') {
-      list = list.filter(t => t.paymentMethod === 'เงินสด');
-    }
+      if (f.quickChip === 'pending' && t.status !== 'ค้างจ่าย') return false;
+      if (f.quickChip === 'transfer' && (t.status !== 'จ่ายแล้ว' || t.paymentMethod !== 'เงินโอน')) return false;
+      if (f.quickChip === 'cash' && (t.status !== 'จ่ายแล้ว' || t.paymentMethod !== 'เงินสด')) return false;
+      if (f.quickChip === 'waived' && t.status !== 'ยกยอด') return false;
 
-    if (f.search) {
-      const q = f.search.toLowerCase().trim();
-      list = list.filter(t => 
-        (t.studentName && t.studentName.toLowerCase().includes(q)) ||
-        (t.group && t.group.toLowerCase().includes(q)) ||
-        (t.firebaseId && t.firebaseId.toLowerCase().includes(q))
-      );
-    }
-
-    if (f.year !== 'all') {
-      list = list.filter(t => t.year === f.year || (t.date && t.date.startsWith(f.year)));
-    }
-
-    if (f.month !== 'all') {
-      list = list.filter(t => t.month === f.month);
-    }
-
-    if (f.group !== 'all') {
-      list = list.filter(t => t.group === f.group);
-    }
-
-    if (f.grade !== 'all') {
-      list = list.filter(t => t.grade === f.grade);
-    }
-
-    if (f.status !== 'all') {
-      list = list.filter(t => t.status === f.status);
-    }
-
-    if (f.payment !== 'all') {
-      list = list.filter(t => t.paymentMethod === f.payment);
-    }
-
-    return list;
+      if (f.search) {
+        const q = f.search.toLowerCase();
+        const matchName = (t.studentName || '').toLowerCase().includes(q);
+        const matchGroup = (t.group || '').toLowerCase().includes(q);
+        const matchDate = (t.date || '').includes(q);
+        if (!matchName && !matchGroup && !matchDate) return false;
+      }
+      return true;
+    });
   },
 
   setQuickChip: function(chip) {
     this.state.filter.quickChip = chip;
     this.state.page = 1;
-    this.renderTransactions();
+    this.renderTransactionsTable();
   },
 
   resetFilters: function() {
@@ -529,488 +1198,63 @@ const App = {
       month: 'all',
       group: 'all',
       grade: 'all',
-      status: 'all',
-      payment: 'all',
       quickChip: 'all'
     };
     const sInput = document.getElementById('filter-search');
     if (sInput) sInput.value = '';
-    ['year', 'month', 'group', 'grade', 'status', 'payment'].forEach(f => {
-      const el = document.getElementById('filter-' + f);
-      if (el) el.value = 'all';
-    });
+    const mSel = document.getElementById('filter-month');
+    if (mSel) mSel.value = 'all';
+    const ySel = document.getElementById('filter-year');
+    if (ySel) ySel.value = 'all';
     this.state.page = 1;
-    this.renderTransactions();
-    this.showToast('ล้างตัวกรองทั้งหมดเรียบร้อย', 'info');
+    this.renderTransactionsTable();
   },
 
-  setTxMonth: function(monthVal) {
-    this.state.filter.month = monthVal;
-    if (monthVal !== 'all' && this.state.filter.year === 'all') {
-      this.state.filter.year = String(new Date().getFullYear());
-    }
-    this.state.page = 1;
-    this.renderTransactions();
-  },
-
-  setTxYear: function(yearVal) {
-    this.state.filter.year = yearVal;
-    this.state.page = 1;
-    this.renderTransactions();
-  },
-
-  setTxToCurrentMonth: function() {
-    const now = new Date();
-    const curYear = String(now.getFullYear());
-    const curMonth = getThaiMonth(now.toISOString().split('T')[0]);
-    this.state.filter.year = curYear;
-    this.state.filter.month = curMonth;
-    this.state.page = 1;
-    this.renderTransactions();
-    this.showToast(`เปลี่ยนเป็นเดือนปัจจุบัน (${curMonth} ${curYear})`, 'info');
-  },
-
-  prevTxMonth: function() {
-    const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    let curIdx = months.indexOf(this.state.filter.month);
-    let curYr = parseInt(this.state.filter.year, 10) || new Date().getFullYear();
-    if (curIdx === -1) {
-      const now = new Date();
-      curYr = now.getFullYear();
-      curIdx = now.getMonth() - 1;
-      if (curIdx < 0) {
-        curIdx = 11;
-        curYr -= 1;
-      }
-    } else if (curIdx === 0) {
-      curIdx = 11;
-      curYr -= 1;
-    } else {
-      curIdx -= 1;
-    }
-    this.state.filter.month = months[curIdx];
-    this.state.filter.year = String(curYr);
-    this.state.page = 1;
-    this.renderTransactions();
-  },
-
-  nextTxMonth: function() {
-    const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    let curIdx = months.indexOf(this.state.filter.month);
-    let curYr = parseInt(this.state.filter.year, 10) || new Date().getFullYear();
-    if (curIdx === -1) {
-      const now = new Date();
-      curYr = now.getFullYear();
-      curIdx = now.getMonth() + 1;
-      if (curIdx > 11) {
-        curIdx = 0;
-        curYr += 1;
-      }
-    } else if (curIdx === 11) {
-      curIdx = 0;
-      curYr += 1;
-    } else {
-      curIdx += 1;
-    }
-    this.state.filter.month = months[curIdx];
-    this.state.filter.year = String(curYr);
-    this.state.page = 1;
-    this.renderTransactions();
-  },
-
-  // ----------------- NAVIGATION -----------------
-  switchTab: function(tabName) {
-    this.state.activeTab = tabName;
-
-    ['quick-record', 'transactions', 'calendar', 'dashboard', 'unpaid', 'master'].forEach(t => {
-      const panel = document.getElementById('tab-panel-' + t);
-      if (panel) panel.classList.add('hidden');
-
-      const navBtn = document.getElementById('nav-' + t);
-      if (navBtn) {
-        navBtn.classList.remove('border-emerald-500', 'text-emerald-600', 'font-bold');
-        navBtn.classList.add('border-transparent', 'text-slate-600');
-      }
-
-      const mBtn = document.getElementById('m-nav-' + t);
-      if (mBtn) {
-        mBtn.classList.remove('text-emerald-600', 'font-bold');
-        mBtn.classList.add('text-slate-400', 'font-medium');
-      }
-    });
-
-    const activePanel = document.getElementById('tab-panel-' + tabName);
-    if (activePanel) activePanel.classList.remove('hidden');
-
-    const activeNav = document.getElementById('nav-' + tabName);
-    if (activeNav) {
-      activeNav.classList.remove('border-transparent', 'text-slate-600');
-      activeNav.classList.add('border-emerald-500', 'text-emerald-600', 'font-bold');
-    }
-
-    const activeM = document.getElementById('m-nav-' + tabName);
-    if (activeM) {
-      activeM.classList.remove('text-slate-400', 'font-medium');
-      activeM.classList.add('text-emerald-600', 'font-bold');
-    }
-
-    if (tabName === 'dashboard') {
-      this.renderDashboard();
-    } else if (tabName === 'transactions') {
-      this.renderTransactions();
-    } else if (tabName === 'calendar') {
-      this.renderCalendar();
-    } else if (tabName === 'quick-record') {
-      this.renderQuickRecord();
-    } else if (tabName === 'unpaid') {
-      this.renderUnpaidTracker();
-    } else if (tabName === 'master') {
-      this.renderMaster();
-    }
-  },
-
-  switchRecordMode: function(mode) {
-    this.state.recordMode = mode;
-    const groupSec = document.getElementById('record-mode-group-sec');
-    const singleSec = document.getElementById('record-mode-single-sec');
-    const bannerControls = document.getElementById('banner-group-controls');
-    const btnGroup = document.getElementById('btn-mode-group');
-    const btnSingle = document.getElementById('btn-mode-single');
-
-    if (mode === 'group') {
-      if (groupSec) groupSec.classList.remove('hidden');
-      if (singleSec) singleSec.classList.add('hidden');
-      if (bannerControls) bannerControls.classList.remove('hidden');
-      if (btnGroup) btnGroup.className = "px-3.5 py-1.5 bg-white text-emerald-800 text-xs font-bold rounded-lg shadow-sm";
-      if (btnSingle) btnSingle.className = "px-3.5 py-1.5 bg-emerald-700/60 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg";
-    } else {
-      if (groupSec) groupSec.classList.add('hidden');
-      if (singleSec) singleSec.classList.remove('hidden');
-      if (bannerControls) bannerControls.classList.add('hidden');
-      if (btnSingle) btnSingle.className = "px-3.5 py-1.5 bg-white text-emerald-800 text-xs font-bold rounded-lg shadow-sm";
-      if (btnGroup) btnGroup.className = "px-3.5 py-1.5 bg-emerald-700/60 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg";
-    }
-  },
-
-  render: function() {
-    this.updateUnpaidBadge();
-    this.switchTab(this.state.activeTab);
-  },
-
-  // ----------------- QUICK RECORD RENDER -----------------
-  renderQuickRecord: function() {
-    // Grade select
-    const gradeSelect = document.getElementById('record-grade-select');
-    if (gradeSelect) {
-      const grades = this.getAvailableGrades();
-      let optionsHtml = grades.map(g => {
-        const sel = g === this.state.recordGrade ? 'selected' : '';
-        const count = this.state.students.filter(s => s.grade === g).length;
-        return `<option value="${g}" ${sel}>ชั้น ${g} (${count} คน)</option>`;
-      }).join('');
-      
-      const otherCount = this.state.students.filter(s => !s.grade || !grades.includes(s.grade)).length;
-      if (otherCount > 0) {
-        optionsHtml += `<option value="other" ${this.state.recordGrade === 'other' ? 'selected' : ''}>อื่นๆ / ไม่ระบุชั้น (${otherCount} คน)</option>`;
-      }
-      optionsHtml += `<option value="all" ${this.state.recordGrade === 'all' ? 'selected' : ''}>ทุกระดับชั้น (ทั้งหมด ${this.state.students.length} คน)</option>`;
-      
-      gradeSelect.innerHTML = optionsHtml;
-    }
-
-    // Group select
-    const groupSelect = document.getElementById('record-group-select');
-    if (groupSelect) {
-      groupSelect.innerHTML = this.state.groups.map(g => {
-        const selected = g.name === this.state.recordGroup ? 'selected' : '';
-        return `<option value="${g.name}" ${selected}>${g.name}</option>`;
-      }).join('');
-    }
-
-    const dateInput = document.getElementById('record-date-input');
-    if (dateInput) dateInput.value = this.state.recordDate;
-
-    const singleGrp = document.getElementById('single-group');
-    if (singleGrp && singleGrp.options.length <= 1) {
-      this.state.groups.forEach(g => {
-        singleGrp.innerHTML += `<option value="${g.name}">${g.name}</option>`;
-      });
-    }
-
-    this.renderQuickRecordList();
-  },
-
-  renderQuickRecordList: function() {
-    const container = document.getElementById('session-students-list');
-    const countSpan = document.getElementById('session-count');
-    const totalSpan = document.getElementById('session-total-amount');
-    if (!container) return;
-
-    const list = this.state.sessionStudents;
-    const activeList = list.filter(s => s.present);
-    const totalAmount = activeList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-
-    if (countSpan) countSpan.textContent = `${activeList.length} คน (จากทั้งหมด ${list.length} คน)`;
-    if (totalSpan) totalSpan.textContent = `฿${totalAmount.toLocaleString()}`;
-
-    if (list.length === 0) {
-      container.innerHTML = `
-        <div class="col-span-full p-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-          <p class="text-sm font-medium">ยังไม่มีนักเรียนในระดับชั้นนี้</p>
-          <button onclick="App.openAddExtraStudentModal()" class="mt-2 text-xs text-emerald-600 font-semibold hover:underline">
-            + คลิกเพื่อเพิ่มนักเรียนเข้าในรอบนี้
-          </button>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = list.map((item, index) => {
-      const isPaid = item.status === 'จ่ายแล้ว';
-      const isTransfer = item.paymentMethod === 'เงินโอน';
-
-      return `
-        <div class="p-2.5 sm:p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
-          item.present 
-            ? (isPaid ? 'border-emerald-300 bg-white hover:border-emerald-400 shadow-sm' : 'border-amber-300 bg-white hover:border-amber-400 shadow-sm') 
-            : 'border-slate-200 bg-white/70 hover:border-slate-300 hover:shadow-sm'
-        }">
-          <!-- Top: Checkbox, Name, Grade & Remove button -->
-          <div>
-            <div class="flex items-start justify-between gap-1.5">
-              <label class="flex items-center gap-1.5 cursor-pointer select-none flex-1 min-w-0">
-                <input type="checkbox" ${item.present ? 'checked' : ''} onchange="App.toggleStudentPresent(${index}, this.checked)" class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer flex-shrink-0">
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1 flex-nowrap overflow-hidden">
-                    <span class="font-bold ${item.present ? 'text-slate-900' : 'text-slate-700'} text-xs sm:text-sm truncate whitespace-nowrap">${item.name}</span>
-                    ${item.grade ? `<span class="px-1 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold whitespace-nowrap flex-shrink-0">${item.grade}</span>` : ''}
-                  </div>
-                  <div class="text-[10px] ${item.present ? 'text-emerald-700 font-semibold' : 'text-slate-400 font-normal'} whitespace-nowrap mt-0.5">
-                    ${item.present ? '✓ มาเรียน' : 'ยังไม่เลือก'}
-                  </div>
-                </div>
-              </label>
-
-              <button onclick="App.removeStudentFromSession(${index})" title="นำออกจากรอบนี้" class="text-slate-300 hover:text-red-500 text-xs p-0.5 flex-shrink-0">
-                ✕
-              </button>
-            </div>
-          </div>
-
-          <!-- Middle & Bottom: Fee + Status + Channel in a seamless adaptive row -->
-          <div class="flex flex-wrap sm:flex-col items-center sm:items-stretch justify-between gap-1.5 pt-1 border-t border-slate-100 ${!item.present ? 'opacity-60' : ''}">
-            
-            <!-- Fee Amount Input with Step 25 -->
-            <div class="flex items-center justify-between bg-slate-50 px-2 py-0.5 sm:py-1 rounded-lg border border-slate-200 text-xs flex-shrink-0">
-              <span class="text-slate-500 text-[10px] sm:text-[11px] font-medium whitespace-nowrap mr-1">ค่าเรียน:</span>
-              <div class="flex items-center gap-0.5 flex-shrink-0">
-                <button type="button" onclick="App.adjustStudentAmount(${index}, -25)" title="ลด 25 บาท" class="w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs leading-none transition select-none flex-shrink-0">
-                  -
-                </button>
-                <input type="number" step="25" min="0" value="${item.amount}" onchange="App.updateStudentAmount(${index}, this.value)" class="w-11 sm:w-14 px-1 py-0.5 text-xs font-bold text-center bg-white border border-slate-200 rounded text-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500">
-                <button type="button" onclick="App.adjustStudentAmount(${index}, 25)" title="เพิ่ม 25 บาท" class="w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs leading-none transition select-none flex-shrink-0">
-                  +
-                </button>
-                <span class="text-slate-400 text-[11px] whitespace-nowrap ml-0.5">฿</span>
-              </div>
-            </div>
-
-            <!-- Status & Channel Buttons -->
-            <div class="flex items-center gap-1 flex-1 sm:w-full min-w-[150px]">
-              <!-- Status: จ่ายแล้ว / ค้างจ่าย -->
-              <div class="grid grid-cols-2 rounded-lg p-0.5 bg-slate-100 text-[10px] sm:text-[11px] text-center font-bold flex-1">
-                <button onclick="App.updateStudentStatus(${index}, 'จ่ายแล้ว')" class="py-0.5 sm:py-1 rounded transition whitespace-nowrap ${isPaid ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}">
-                  จ่ายแล้ว
-                </button>
-                <button onclick="App.updateStudentStatus(${index}, 'ค้างจ่าย')" class="py-0.5 sm:py-1 rounded transition whitespace-nowrap ${!isPaid ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}">
-                  ค้างจ่าย
-                </button>
-              </div>
-
-              <!-- Channel: โอน / สด (only when จ่ายแล้ว) -->
-              <div class="grid grid-cols-2 rounded-lg p-0.5 bg-slate-100 text-[10px] sm:text-[11px] text-center font-bold flex-1 ${!isPaid ? 'invisible' : ''}">
-                <button onclick="App.updateStudentPayment(${index}, 'เงินโอน')" class="py-0.5 sm:py-1 rounded transition whitespace-nowrap ${isTransfer ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}">
-                  📱 โอน
-                </button>
-                <button onclick="App.updateStudentPayment(${index}, 'เงินสด')" class="py-0.5 sm:py-1 rounded transition whitespace-nowrap ${!isTransfer ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}">
-                  💵 สด
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      `;
-    }).join('');
-  },
-
-  toggleStudentPresent: function(index, isChecked) {
-    if (this.state.sessionStudents[index]) {
-      this.state.sessionStudents[index].present = isChecked;
-      this.renderQuickRecordList();
-    }
-  },
-
-  adjustStudentAmount: function(index, delta) {
-    if (this.state.sessionStudents[index]) {
-      const cur = Number(this.state.sessionStudents[index].amount) || 0;
-      this.state.sessionStudents[index].amount = Math.max(0, cur + delta);
-      this.state.sessionStudents[index].present = true;
-      this.renderQuickRecordList();
-    }
-  },
-
-  updateStudentAmount: function(index, amount) {
-    if (this.state.sessionStudents[index]) {
-      this.state.sessionStudents[index].amount = Math.max(0, Number(amount) || 0);
-      this.renderQuickRecordList();
-    }
-  },
-
-  updateStudentStatus: function(index, status) {
-    if (this.state.sessionStudents[index]) {
-      this.state.sessionStudents[index].status = status;
-      if (status === 'ค้างจ่าย') {
-        this.state.sessionStudents[index].paymentMethod = '-';
-      } else if (this.state.sessionStudents[index].paymentMethod === '-') {
-        this.state.sessionStudents[index].paymentMethod = 'เงินโอน';
-      }
-      this.state.sessionStudents[index].present = true;
-      this.renderQuickRecordList();
-    }
-  },
-
-  updateStudentPayment: function(index, method) {
-    if (this.state.sessionStudents[index]) {
-      this.state.sessionStudents[index].paymentMethod = method;
-      this.renderQuickRecordList();
-    }
-  },
-
-  removeStudentFromSession: function(index) {
-    this.state.sessionStudents.splice(index, 1);
-    this.renderQuickRecordList();
-  },
-
-  // Extra Student Modal
-  openAddExtraStudentModal: function() {
-    const select = document.getElementById('extra-student-select');
-    if (select) {
-      const existingInSession = new Set(this.state.sessionStudents.map(s => s.name));
-      select.innerHTML = '<option value="">-- เลือกจากรายชื่อนักเรียนที่มีอยู่ --</option>' +
-        this.state.students
-          .filter(s => !existingInSession.has(s.name))
-          .map(s => `<option value="${s.name}">${s.name} (${s.grade || 'ไม่ระบุชั้น'})</option>`)
-          .join('');
-    }
-    const modal = document.getElementById('extra-student-modal');
-    if (modal) modal.classList.remove('hidden');
-  },
-
-  closeAddExtraStudentModal: function() {
-    const modal = document.getElementById('extra-student-modal');
-    if (modal) modal.classList.add('hidden');
-  },
-
-  confirmAddExtraStudent: function() {
-    const selectVal = document.getElementById('extra-student-select').value;
-    const manualVal = document.getElementById('extra-student-manual').value.trim();
-    const name = manualVal || selectVal;
-
-    if (!name) {
-      this.showToast('กรุณาเลือกหรือระบุชื่อนักเรียน', 'error');
-      return;
-    }
-
-    const studentProfile = this.state.students.find(s => s.name === name) || {};
-    this.state.sessionStudents.push({
-      name: name,
-      grade: studentProfile.grade || '',
-      group: this.state.recordGroup,
-      amount: studentProfile.defaultFee || 200,
-      present: true,
-      status: 'ค้างจ่าย',
-      paymentMethod: '-'
-    });
-
-    this.closeAddExtraStudentModal();
-    this.renderQuickRecordList();
-    this.showToast(`เพิ่ม "${name}" ในรอบนี้เรียบร้อย`, 'info');
-  },
-
-  onSingleStatusChange: function(status) {
-    this.state.singleStatus = status;
-    const paySelect = document.getElementById('single-payment');
-    if (status === 'ค้างจ่าย') {
-      this.state.singlePayment = '-';
-      if (paySelect) {
-        paySelect.value = '-';
-        paySelect.disabled = true;
-      }
-    } else {
-      if (this.state.singlePayment === '-') {
-        this.state.singlePayment = 'เงินโอน';
-      }
-      if (paySelect) {
-        paySelect.value = this.state.singlePayment;
-        paySelect.disabled = false;
-      }
-    }
-  },
-
-  onSingleStudentInput: function(val) {
-    this.state.singleStudentName = val;
-    const match = this.state.students.find(s => s.name.toLowerCase() === val.trim().toLowerCase());
-    if (match) {
-      this.state.singleGrade = match.grade;
-      this.state.singleGroup = match.group;
-      this.state.singleAmount = match.defaultFee || 200;
-
-      const gInput = document.getElementById('single-grade');
-      const grpSelect = document.getElementById('single-group');
-      const feeInput = document.getElementById('single-amount');
-      if (gInput) gInput.value = match.grade || '';
-      if (grpSelect) grpSelect.value = match.group || '';
-      if (feeInput) feeInput.value = match.defaultFee || 200;
-    }
-  },
-
-  // ----------------- TRANSACTIONS RENDER -----------------
-  renderTransactions: function() {
+  renderTransactionsTable: function() {
     const filtered = this.getFilteredTransactions();
-    const countBadge = document.getElementById('tx-filter-count');
-    const totalSumEl = document.getElementById('tx-filter-sum');
-    const paidSumEl = document.getElementById('tx-filter-paid');
-    const pendingSumEl = document.getElementById('tx-filter-pending');
+    const paidAmt = filtered.filter(t => t.status === 'จ่ายแล้ว').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const pendAmt = filtered.filter(t => t.status === 'ค้างจ่าย').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const waivedAmt = filtered.filter(t => t.status === 'ยกยอด').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const totalAmt = paidAmt + pendAmt; // Exclude waived bad debt from active revenue sum
 
-    const totalAmount = filtered.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    const paidAmount = filtered.filter(t => t.status === 'จ่ายแล้ว').reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    const pendingAmount = filtered.filter(t => t.status === 'ค้างจ่าย').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const elCount = document.getElementById('tx-filter-count');
+    const elSum = document.getElementById('tx-filter-sum');
+    const elPaid = document.getElementById('tx-filter-paid');
+    const elPend = document.getElementById('tx-filter-pending');
+    const elWaivedWrap = document.getElementById('tx-filter-waived-wrap');
+    const elWaived = document.getElementById('tx-filter-waived');
 
-    if (countBadge) countBadge.textContent = `${filtered.length} / ${this.state.transactions.length} รายการ`;
-    if (totalSumEl) totalSumEl.textContent = `฿${totalAmount.toLocaleString()}`;
-    if (paidSumEl) paidSumEl.textContent = `฿${paidAmount.toLocaleString()}`;
-    if (pendingSumEl) pendingSumEl.textContent = `฿${pendingAmount.toLocaleString()}`;
+    if (elCount) elCount.textContent = `${filtered.length} รายการ`;
+    if (elSum) elSum.textContent = `฿${totalAmt.toLocaleString()}`;
+    if (elPaid) elPaid.textContent = `฿${paidAmt.toLocaleString()}`;
+    if (elPend) elPend.textContent = `฿${pendAmt.toLocaleString()}`;
+    if (elWaived) elWaived.textContent = `฿${waivedAmt.toLocaleString()}`;
+    if (elWaivedWrap) {
+      if (waivedAmt > 0 || this.state.filter.quickChip === 'waived') elWaivedWrap.classList.remove('hidden');
+      else elWaivedWrap.classList.add('hidden');
+    }
 
-    // Update Quick Chip buttons
-    ['all', 'pending', 'transfer', 'cash'].forEach(c => {
+    ['all', 'pending', 'transfer', 'cash', 'waived'].forEach(c => {
       const btn = document.getElementById('chip-' + c);
       if (btn) {
         if (this.state.filter.quickChip === c) {
-          btn.classList.remove('bg-white', 'bg-slate-100', 'text-slate-700', 'border-slate-200');
-          btn.classList.add('bg-emerald-600', 'text-white', 'border-emerald-600');
+          btn.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-zinc-950 shadow-sm transition whitespace-nowrap';
         } else {
-          btn.classList.remove('bg-emerald-600', 'text-white', 'border-emerald-600');
-          btn.classList.add('bg-white', 'text-slate-700', 'border-slate-200');
+          btn.className = 'px-3 py-1 rounded-full text-xs font-medium surface-elevated text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 transition whitespace-nowrap';
         }
       }
     });
 
-    this.populateFilterDropdowns();
+    // Populate Group filter dropdown
+    const grpFilter = document.getElementById('filter-group');
+    if (grpFilter && grpFilter.options.length <= 1) {
+      const allGrps = Array.from(new Set(this.state.transactions.map(t => t.group).filter(Boolean)));
+      grpFilter.innerHTML = `<option value="all">👥 ทุกกลุ่มเรียน</option>` +
+        allGrps.map(g => `<option value="${g}">${g}</option>`).join('');
+    }
 
     const totalPages = Math.ceil(filtered.length / this.state.pageSize) || 1;
     if (this.state.page > totalPages) this.state.page = 1;
-
     const startIdx = (this.state.page - 1) * this.state.pageSize;
     const pageItems = filtered.slice(startIdx, startIdx + this.state.pageSize);
 
@@ -1018,207 +1262,188 @@ const App = {
     if (!tbody) return;
 
     if (pageItems.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="9" class="py-12 text-center text-slate-400">
-            ไม่พบรายการที่ตรงกับตัวกรอง
-          </td>
-        </tr>
-      `;
-      return;
-    }
-
-    tbody.innerHTML = pageItems.map((tx, idx) => {
-      const isPaid = tx.status === 'จ่ายแล้ว';
-      return `
-        <tr class="hover:bg-slate-50 transition border-b border-slate-100 ${!isPaid ? 'bg-amber-50/30' : ''}">
-          <td class="py-3 px-3 text-slate-400 font-mono text-xs">${startIdx + idx + 1}</td>
-          <td class="py-3 px-3 whitespace-nowrap font-medium text-slate-700">${tx.date}</td>
-          <td class="py-3 px-3 whitespace-nowrap font-bold text-slate-900">${tx.studentName}</td>
-          <td class="py-3 px-3 whitespace-nowrap"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-medium">${tx.grade || '-'}</span></td>
-          <td class="py-3 px-3 whitespace-nowrap text-slate-600 font-medium">${tx.group || '-'}</td>
-          <td class="py-3 px-3 whitespace-nowrap text-right font-bold ${isPaid ? 'text-emerald-700' : 'text-amber-700'} text-sm">฿${(Number(tx.amount) || 0).toLocaleString()}</td>
-          <td class="py-3 px-3 whitespace-nowrap text-center">
-            <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
-              ${tx.status}
-            </span>
-          </td>
-          <td class="py-3 px-3 whitespace-nowrap text-slate-600">
-            ${tx.paymentMethod === 'เงินโอน' ? '<span class="text-blue-600 font-medium">📱 โอนเงิน</span>' : (tx.paymentMethod === 'เงินสด' ? '<span class="text-slate-700 font-medium">💵 เงินสด</span>' : '<span class="text-slate-400">-</span>')}
-          </td>
-          <td class="py-3 px-3 whitespace-nowrap text-center">
-            <div class="flex items-center justify-center gap-1.5">
-              ${!isPaid ? `
-                <button onclick="App.openPaymentMethodModal('${tx.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[11px] font-bold shadow-sm transition">
-                  ✓ เปลี่ยนเป็นจ่ายแล้ว
+      tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-slate-400 dark:text-zinc-500">ไม่พบรายการที่ค้นหา</td></tr>`;
+    } else {
+      tbody.innerHTML = pageItems.map((tx, idx) => {
+        const isPaid = tx.status === 'จ่ายแล้ว';
+        const isWaived = tx.status === 'ยกยอด';
+        return `
+          <tr class="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition border-b border-slate-100 dark:border-zinc-800/60 ${isWaived ? 'opacity-60' : ''}">
+            <td class="py-2.5 px-3 text-slate-400 dark:text-zinc-500 font-mono text-[11px]">${startIdx + idx + 1}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap font-medium text-slate-700 dark:text-zinc-300">${tx.date}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap font-bold text-slate-900 dark:text-zinc-100 ${isWaived ? 'line-through decoration-rose-500/60' : ''}">${tx.studentName}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap"><span class="px-2 py-0.5 rounded-md surface-elevated text-[11px] font-medium">${tx.grade || '-'}</span></td>
+            <td class="py-2.5 px-3 whitespace-nowrap text-slate-500 dark:text-zinc-400">${tx.group || '-'}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap text-right font-bold ${isPaid ? 'text-emerald-500' : isWaived ? 'text-rose-400 line-through' : 'amber-high-contrast text-amber-600'}">฿${(Number(tx.amount) || 0).toLocaleString()}</td>
+            <td class="py-2.5 px-3 whitespace-nowrap text-center">
+              ${isPaid ? `
+                <button onclick="App.openQuickPayModal('${tx.id}')" title="คลิกเพื่อเปลี่ยนสถานะ"
+                  class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition">
+                  ✓ ${tx.paymentMethod === 'เงินสด' ? 'สด' : 'โอน'}
                 </button>
-              ` : ''}
-              <button onclick="App.openEditModal('${tx.id}')" class="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded transition" title="แก้ไข">
-                ✏️
-              </button>
-              <button onclick="App.deleteTransaction('${tx.id}')" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded transition" title="ลบ">
-                🗑️
-              </button>
+              ` : isWaived ? `
+                <button onclick="App.openQuickPayModal('${tx.id}')" title="คลิกเพื่อคืนค่าหรือเปลี่ยนสถานะ"
+                  class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25 transition">
+                  🚫 ยกยอด
+                </button>
+              ` : `
+                <button onclick="App.openQuickPayModal('${tx.id}')"
+                  class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 amber-high-contrast text-amber-600 border border-amber-500/30 hover:bg-amber-500/25 transition">
+                  ⏳ ค้างจ่าย
+                </button>
+              `}
+            </td>
+            <td class="py-2.5 px-3 whitespace-nowrap text-center">
+              <div class="flex items-center justify-center gap-1">
+                <button onclick="App.openEditTxModal('${tx.id}')" class="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition" title="แก้ไข">✏️</button>
+                <button onclick="App.deleteTx('${tx.id}')" class="p-1 rounded hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition" title="ลบ">🗑️</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Pagination
+    const pagEl = document.getElementById('tx-pagination');
+    if (pagEl) {
+      if (totalPages <= 1) {
+        pagEl.innerHTML = '';
+      } else {
+        pagEl.innerHTML = `
+          <div class="flex items-center justify-between pt-2 text-xs text-slate-500 dark:text-zinc-400">
+            <span>หน้า ${this.state.page} จาก ${totalPages}</span>
+            <div class="flex items-center gap-1.5">
+              <button onclick="App.setPage(${this.state.page - 1})" ${this.state.page <= 1 ? 'disabled' : ''} class="px-3 py-1 rounded-lg surface-elevated disabled:opacity-40">◀ ก่อนหน้า</button>
+              <button onclick="App.setPage(${this.state.page + 1})" ${this.state.page >= totalPages ? 'disabled' : ''} class="px-3 py-1 rounded-lg surface-elevated disabled:opacity-40">ถัดไป ▶</button>
             </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
-
-    const pageControls = document.getElementById('tx-pagination');
-    if (pageControls) {
-      pageControls.innerHTML = `
-        <div class="flex items-center justify-between text-xs text-slate-600 py-3">
-          <span>แสดง ${startIdx + 1} - ${Math.min(startIdx + this.state.pageSize, filtered.length)} จาก ${filtered.length} รายการ</span>
-          <div class="flex items-center gap-2">
-            <button onclick="App.changePage(${this.state.page - 1})" ${this.state.page <= 1 ? 'disabled class="px-3 py-1 rounded border border-slate-200 text-slate-300 cursor-not-allowed"' : 'class="px-3 py-1 rounded border border-slate-300 hover:bg-slate-100"'}>
-              &larr; ก่อนหน้า
-            </button>
-            <span class="font-bold text-slate-800">หน้า ${this.state.page} / ${totalPages}</span>
-            <button onclick="App.changePage(${this.state.page + 1})" ${this.state.page >= totalPages ? 'disabled class="px-3 py-1 rounded border border-slate-200 text-slate-300 cursor-not-allowed"' : 'class="px-3 py-1 rounded border border-slate-300 hover:bg-slate-100"'}>
-              ถัดไป &rarr;
-            </button>
-          </div>
-        </div>
-      `;
-    }
-  },
-
-  changePage: function(newPage) {
-    this.state.page = newPage;
-    this.renderTransactions();
-  },
-
-  populateFilterDropdowns: function() {
-    const yearSelect = document.getElementById('filter-year');
-    if (yearSelect) {
-      const years = Array.from(new Set(this.state.transactions.map(t => t.year || (t.date ? t.date.split('-')[0] : '')).filter(Boolean))).sort().reverse();
-      if (!years.includes('2026')) years.unshift('2026');
-      if (!years.includes('2025')) years.push('2025');
-      const curVal = this.state.filter.year || 'all';
-      
-      const optionsHtml = `<option value="all">ทุกปี</option>` + years.map(y => `<option value="${y}">ปี ${y}</option>`).join('');
-      if (yearSelect.innerHTML !== optionsHtml) {
-        yearSelect.innerHTML = optionsHtml;
-      }
-      yearSelect.value = curVal;
-    }
-
-    const monthSelect = document.getElementById('filter-month');
-    if (monthSelect) {
-      monthSelect.value = this.state.filter.month || 'all';
-    }
-
-    const groupSelect = document.getElementById('filter-group');
-    if (groupSelect && groupSelect.options.length <= 1) {
-      this.state.groups.forEach(g => {
-        groupSelect.innerHTML += `<option value="${g.name}">${g.name}</option>`;
-      });
-      groupSelect.value = this.state.filter.group || 'all';
-    }
-  },
-
-  // ----------------- 📅 CALENDAR VIEW RENDER -----------------
-  renderCalendar: function() {
-    const monthsFull = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-    const curYear = this.state.calendarYear;
-    const curMonth = this.state.calendarMonth;
-
-    const titleEl = document.getElementById('calendar-month-title');
-    if (titleEl) {
-      titleEl.textContent = `${monthsFull[curMonth]} ${curYear}`;
-    }
-
-    // Days in month
-    const firstDayIndex = new Date(curYear, curMonth, 1).getDay(); // 0 = Sun
-    const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
-    const daysInPrevMonth = new Date(curYear, curMonth, 0).getDate();
-
-    const grid = document.getElementById('calendar-days-grid');
-    if (!grid) return;
-
-    // Aggregate transactions by date string YYYY-MM-DD
-    const txByDate = {};
-    this.state.transactions.forEach(t => {
-      if (t.date) {
-        if (!txByDate[t.date]) {
-          txByDate[t.date] = { count: 0, sum: 0, pendingCount: 0, groups: new Set(), students: [] };
-        }
-        txByDate[t.date].count++;
-        txByDate[t.date].sum += (Number(t.amount) || 0);
-        if (t.status === 'ค้างจ่าย') txByDate[t.date].pendingCount++;
-        if (t.group) txByDate[t.date].groups.add(t.group);
-        txByDate[t.date].students.push(t);
-      }
-    });
-
-    let cellsHtml = '';
-
-    // Prev month padding days
-    for (let i = firstDayIndex - 1; i >= 0; i--) {
-      const dayNum = daysInPrevMonth - i;
-      cellsHtml += `
-        <div class="min-h-[56px] sm:min-h-[64px] lg:min-h-[68px] p-1.5 bg-slate-50/50 border border-slate-100 rounded-xl text-slate-300 select-none">
-          <span class="text-xs font-medium">${dayNum}</span>
-        </div>
-      `;
-    }
-
-    // Current month days
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const monthStr = String(curMonth + 1).padStart(2, '0');
-      const dayStr = String(d).padStart(2, '0');
-      const dateKey = `${curYear}-${monthStr}-${dayStr}`;
-
-      const dayData = txByDate[dateKey];
-      const isToday = dateKey === todayStr;
-
-      let badgeContent = '';
-      if (dayData) {
-        const hasPending = dayData.pendingCount > 0;
-        const groupsArr = Array.from(dayData.groups);
-        badgeContent = `
-          <div class="mt-0.5 space-y-0.5">
-            <div class="flex items-center justify-between text-[10px] sm:text-[11px] font-bold ${hasPending ? 'text-amber-700 bg-amber-50' : 'text-emerald-700 bg-emerald-50'} px-1 py-0.2 rounded border ${hasPending ? 'border-amber-200' : 'border-emerald-200'} whitespace-nowrap">
-              <span>฿${dayData.sum.toLocaleString()}</span>
-              <span class="text-[9px] sm:text-[10px]">${dayData.count} คน</span>
-            </div>
-            ${groupsArr.slice(0, 1).map(g => `<div class="text-[9px] sm:text-[10px] text-slate-500 truncate px-0.5 font-medium whitespace-nowrap">${g}</div>`).join('')}
-            ${hasPending ? `<div class="text-[9px] sm:text-[10px] font-bold text-amber-600 truncate whitespace-nowrap">⚠️ ค้าง ${dayData.pendingCount}</div>` : ''}
           </div>
         `;
       }
-
-      cellsHtml += `
-        <div onclick="App.openDayDetailModal('${dateKey}')" class="min-h-[56px] sm:min-h-[64px] lg:min-h-[68px] p-1.5 bg-white hover:bg-slate-50 border ${isToday ? 'border-emerald-500 shadow-sm' : 'border-slate-200'} rounded-xl cursor-pointer transition flex flex-col justify-between group hover:border-emerald-400">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold ${isToday ? 'w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px]' : 'text-slate-800'}">${d}</span>
-            ${dayData ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>' : ''}
-          </div>
-          <div class="flex-1">${badgeContent}</div>
-        </div>
-      `;
     }
-
-    grid.innerHTML = cellsHtml;
   },
 
-  changeCalendarMonth: function(offset) {
-    let newMonth = this.state.calendarMonth + offset;
-    let newYear = this.state.calendarYear;
+  setPage: function(p) {
+    this.state.page = p;
+    this.renderTransactionsTable();
+  },
 
-    if (newMonth < 0) {
-      newMonth = 11;
-      newYear--;
-    } else if (newMonth > 11) {
-      newMonth = 0;
-      newYear++;
+  // Quick Pay Modal (1-Tap Transfer, Cash, Waive, or Pending)
+  openQuickPayModal: function(txId) {
+    const tx = this.state.transactions.find(t => t.id === txId);
+    if (!tx) return;
+    this.state.payingTxId = txId;
+    document.getElementById('pay-modal-student').textContent = tx.studentName;
+    document.getElementById('pay-modal-info').textContent = `${tx.date} · ${tx.group || '-'} (สถานะปัจจุบัน: ${tx.status})`;
+    document.getElementById('pay-modal-amount').textContent = `฿${(Number(tx.amount) || 0).toLocaleString()}`;
+    const modal = document.getElementById('payment-method-modal');
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closePaymentMethodModal: function() {
+    this.state.payingTxId = null;
+    const modal = document.getElementById('payment-method-modal');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  selectPaymentMethod: function(method) {
+    const tx = this.state.transactions.find(t => t.id === this.state.payingTxId);
+    if (tx) {
+      if (method === 'ยกยอด') {
+        tx.status = 'ยกยอด';
+        tx.paymentMethod = '-';
+        this.showToast(`ยกยอดรายการของ ${tx.studentName} เรียบร้อย 🚫`, 'info');
+      } else if (method === 'ค้างจ่าย') {
+        tx.status = 'ค้างจ่าย';
+        tx.paymentMethod = '-';
+        this.showToast(`เปลี่ยนรายการของ ${tx.studentName} เป็นค้างจ่าย ⏳`, 'info');
+      } else {
+        tx.status = 'จ่ายแล้ว';
+        tx.paymentMethod = method;
+        this.showToast(`บันทึกการชำระเงิน (${tx.studentName} · ${method}) เรียบร้อย`, 'success');
+      }
+      this.saveData(false);
+      this.render();
     }
+    this.closePaymentMethodModal();
+  },
 
-    this.state.calendarMonth = newMonth;
-    this.state.calendarYear = newYear;
+  toggleTxToPending: function(txId) {
+    const tx = this.state.transactions.find(t => t.id === txId);
+    if (!tx) return;
+    tx.status = 'ค้างจ่าย';
+    tx.paymentMethod = '-';
+    this.saveData(false);
+    this.render();
+    this.showToast(`สลับรายการของ ${tx.studentName} เป็นค้างจ่าย`, 'info');
+  },
+
+  openEditTxModal: function(txId) {
+    const tx = this.state.transactions.find(t => t.id === txId);
+    if (!tx) return;
+    this.state.editingTxId = txId;
+    document.getElementById('edit-date').value = tx.date || '';
+    document.getElementById('edit-student').value = tx.studentName || '';
+    document.getElementById('edit-grade').value = tx.grade || '';
+    document.getElementById('edit-group').value = tx.group || '';
+    document.getElementById('edit-amount').value = tx.amount || 0;
+    document.getElementById('edit-status').value = tx.status || 'จ่ายแล้ว';
+    document.getElementById('edit-payment').value = tx.paymentMethod || 'เงินโอน';
+    const modal = document.getElementById('edit-tx-modal');
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closeEditModal: function() {
+    this.state.editingTxId = null;
+    const modal = document.getElementById('edit-tx-modal');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  saveEditTxModal: function() {
+    const tx = this.state.transactions.find(t => t.id === this.state.editingTxId);
+    if (!tx) return;
+    const dVal = document.getElementById('edit-date').value;
+    tx.date = dVal;
+    tx.year = dVal ? dVal.split('-')[0] : tx.year;
+    tx.month = getThaiMonth(dVal);
+    tx.studentName = document.getElementById('edit-student').value.trim();
+    tx.grade = document.getElementById('edit-grade').value.trim();
+    tx.group = document.getElementById('edit-group').value.trim();
+    tx.amount = Number(document.getElementById('edit-amount').value) || 0;
+    tx.status = document.getElementById('edit-status').value;
+    tx.paymentMethod = (tx.status === 'ค้างจ่าย' || tx.status === 'ยกยอด') ? '-' : document.getElementById('edit-payment').value;
+
+    this.saveData(false);
+    this.closeEditModal();
+    this.render();
+    this.showToast('บันทึกการแก้ไขเรียบร้อย', 'success');
+  },
+
+  deleteTx: function(txId) {
+    const tx = this.state.transactions.find(t => t.id === txId);
+    if (!tx) return;
+    this.openConfirmModal({
+      title: 'ลบรายการบันทึก',
+      message: `ต้องการลบรายการของ "${tx.studentName}" วันที่ ${tx.date} (฿${tx.amount}) ใช่หรือไม่?`,
+      confirmText: 'ลบรายการ',
+      confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
+      onConfirm: () => {
+        this.state.transactions = this.state.transactions.filter(t => t.id !== txId);
+        this.saveData(false);
+        this.render();
+        this.showToast('ลบรายการเรียบร้อย', 'info');
+      }
+    });
+  },
+
+  // Calendar View
+  changeCalendarMonth: function(delta) {
+    let m = this.state.calendarMonth + delta;
+    let y = this.state.calendarYear;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    this.state.calendarMonth = m;
+    this.state.calendarYear = y;
     this.renderCalendar();
   },
 
@@ -1229,46 +1454,78 @@ const App = {
     this.renderCalendar();
   },
 
-  openDayDetailModal: function(dateStr) {
-    this.state.selectedCalendarDate = dateStr;
-    const dayTx = this.state.transactions.filter(t => t.date === dateStr);
-    
-    document.getElementById('day-modal-date').textContent = `วันที่ ${dateStr} (${getThaiMonth(dateStr)})`;
-    const sum = dayTx.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    const paidSum = dayTx.filter(t => t.status === 'จ่ายแล้ว').reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    const pendingSum = dayTx.filter(t => t.status === 'ค้างจ่าย').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  renderCalendar: function() {
+    const y = this.state.calendarYear;
+    const m = this.state.calendarMonth;
+    const titleEl = document.getElementById('calendar-month-title');
+    if (titleEl) {
+      titleEl.textContent = `📅 ${THAI_MONTHS_FULL[m]} ${y + 543} (${y})`;
+    }
 
-    document.getElementById('day-modal-summary').innerHTML = `
-      <span>ทั้งหมด: <strong>${dayTx.length} คน</strong></span> · 
-      <span>ยอดรวม: <strong class="text-emerald-700">฿${sum.toLocaleString()}</strong></span> · 
-      <span>จ่ายแล้ว: <strong class="text-blue-700">฿${paidSum.toLocaleString()}</strong></span>
-      ${pendingSum > 0 ? ` · <span>ค้าง: <strong class="text-amber-700">฿${pendingSum.toLocaleString()}</strong></span>` : ''}
-    `;
+    const firstDay = new Date(y, m, 1).getDay();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const todayIso = getTodayISO();
 
-    const listContainer = document.getElementById('day-modal-list');
-    if (dayTx.length === 0) {
-      listContainer.innerHTML = `
-        <div class="p-6 text-center text-slate-400 text-xs">
-          ยังไม่มีการบันทึกการสอนในวันที่นี้
+    const grid = document.getElementById('calendar-days-grid');
+    if (!grid) return;
+
+    let html = '';
+    for (let i = 0; i < firstDay; i++) {
+      html += `<div class="h-20 sm:h-24 rounded-xl bg-slate-100/40 dark:bg-zinc-900/30 border border-transparent"></div>`;
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayTxs = this.state.transactions.filter(t => t.date === iso);
+      const total = dayTxs.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+      const hasUnpaid = dayTxs.some(t => t.status === 'ค้างจ่าย');
+      const isToday = iso === todayIso;
+
+      html += `
+        <div onclick="App.openDayDetailModal('${iso}')"
+          class="h-20 sm:h-24 rounded-xl p-1.5 sm:p-2 surface-card hover:border-emerald-500/50 transition cursor-pointer flex flex-col justify-between overflow-hidden ${
+            isToday ? 'ring-2 ring-emerald-500' : ''
+          }">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold ${isToday ? 'text-emerald-400' : 'text-slate-700 dark:text-zinc-300'}">${d}</span>
+            ${dayTxs.length > 0 ? `<span class="text-[10px] px-1.5 rounded-full font-bold ${hasUnpaid ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}">${dayTxs.length} คน</span>` : ''}
+          </div>
+          ${dayTxs.length > 0 ? `
+            <div>
+              <div class="text-[10px] text-slate-400 dark:text-zinc-400 truncate">${dayTxs.map(t => t.studentName).join(', ')}</div>
+              <div class="text-xs font-bold text-emerald-500 mt-0.5">฿${total.toLocaleString()}</div>
+            </div>
+          ` : `<div class="text-[10px] text-slate-300 dark:text-zinc-700">-</div>`}
         </div>
       `;
+    }
+
+    grid.innerHTML = html;
+  },
+
+  openDayDetailModal: function(isoDate) {
+    this.state.selectedCalendarDate = isoDate;
+    const dayTxs = this.state.transactions.filter(t => t.date === isoDate);
+    const total = dayTxs.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+
+    document.getElementById('day-modal-date').textContent = `📅 รายการวันที่ ${isoDate}`;
+    document.getElementById('day-modal-summary').textContent = `ผู้เรียน ${dayTxs.length} คน · ยอดรวม ฿${total.toLocaleString()}`;
+
+    const listEl = document.getElementById('day-modal-list');
+    if (dayTxs.length === 0) {
+      listEl.innerHTML = `<div class="py-8 text-center text-slate-400 text-xs">ยังไม่มีรายการบันทึกในวันนี้</div>`;
     } else {
-      listContainer.innerHTML = dayTx.map(t => {
-        const isPaid = t.status === 'จ่ายแล้ว';
+      listEl.innerHTML = dayTxs.map(tx => {
+        const isPaid = tx.status === 'จ่ายแล้ว';
         return `
-          <div class="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+          <div class="flex items-center justify-between p-2.5 rounded-xl surface-elevated text-xs">
             <div>
-              <div class="font-bold text-slate-900 text-sm">${t.studentName} <span class="text-[11px] font-medium text-slate-500">(${t.grade || '-'})</span></div>
-              <div class="text-[11px] text-slate-400 mt-0.5">กลุ่ม: ${t.group || '-'} · ช่องทาง: ${t.paymentMethod}</div>
+              <span class="font-bold text-slate-900 dark:text-zinc-100">${tx.studentName}</span>
+              <span class="text-[10px] text-slate-400 ml-1">(${tx.grade || '-'} · ${tx.group || '-'})</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="font-bold text-sm ${isPaid ? 'text-emerald-700' : 'text-amber-700'}">฿${(Number(t.amount) || 0).toLocaleString()}</span>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${t.status}</span>
-              ${!isPaid ? `
-                <button onclick="App.closeDayDetailModal(); App.openPaymentMethodModal('${t.id}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold">
-                  ✓ รับชำระ
-                </button>
-              ` : ''}
+              <span class="font-bold ${isPaid ? 'text-emerald-400' : 'amber-high-contrast text-amber-500'}">฿${tx.amount}</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isPaid ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 amber-high-contrast'}">${tx.status}</span>
             </div>
           </div>
         `;
@@ -1280,7 +1537,6 @@ const App = {
   },
 
   closeDayDetailModal: function() {
-    this.state.selectedCalendarDate = null;
     const modal = document.getElementById('day-detail-modal');
     if (modal) modal.classList.add('hidden');
   },
@@ -1288,178 +1544,63 @@ const App = {
   jumpToQuickRecordForDate: function() {
     if (this.state.selectedCalendarDate) {
       this.state.recordDate = this.state.selectedCalendarDate;
-      this.closeDayDetailModal();
-      this.switchTab('quick-record');
-      this.showToast(`เลือกวันที่ ${this.state.recordDate} ในหน้าเช็คชื่อเรียบร้อย`, 'info');
     }
+    this.closeDayDetailModal();
+    this.switchTab('quick-record');
   },
 
-  // ----------------- DASHBOARD RENDER -----------------
+  // ==================== 📊 TAB 4: ANALYTICS DASHBOARD ====================
   renderDashboard: function() {
-    const txList = this.state.transactions;
-    const totalIncome = txList.filter(t => t.status === 'จ่ายแล้ว').reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    const totalPendingAmount = txList.filter(t => t.status === 'ค้างจ่าย').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const y = this.state.dashYear;
+    const m = this.state.dashMonth;
 
-    // Populate Year select if needed
-    const yearSelect = document.getElementById('dash-year-select');
-    if (yearSelect) {
-      const years = Array.from(new Set(txList.map(t => t.year || (t.date ? t.date.split('-')[0] : '')).filter(Boolean))).sort().reverse();
-      if (!years.includes('2026')) years.unshift('2026');
-      if (yearSelect.options.length <= 2) {
-        yearSelect.innerHTML = years.map(y => `<option value="${y}" ${y === this.state.dashSelectedYear ? 'selected' : ''}>ปี ${y}</option>`).join('');
-      } else {
-        yearSelect.value = this.state.dashSelectedYear;
-      }
-    }
+    const mSelect = document.getElementById('dash-month-select');
+    const ySelect = document.getElementById('dash-year-select');
+    if (mSelect) mSelect.value = m;
+    if (ySelect) ySelect.value = y;
 
-    const monthSelect = document.getElementById('dash-month-select');
-    if (monthSelect) {
-      monthSelect.value = this.state.dashSelectedMonth;
-    }
-
-    const selYear = this.state.dashSelectedYear;
-    const selMonth = this.state.dashSelectedMonth;
-
-    // Filter transactions for the selected month/year
-    const periodTx = txList.filter(t => {
-      const matchYear = !selYear || selYear === 'all' || t.year === selYear || (t.date && t.date.startsWith(selYear));
-      const matchMonth = !selMonth || selMonth === 'all' || t.month === selMonth;
-      return matchYear && matchMonth;
+    const allPaid = this.state.transactions.filter(t => t.status === 'จ่ายแล้ว').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const periodTxs = this.state.transactions.filter(t => {
+      if (t.status === 'ยกยอด') return false;
+      if (y !== 'all' && t.year !== y) return false;
+      if (m !== 'all' && t.month !== m) return false;
+      return true;
     });
 
-    const periodPaidTx = periodTx.filter(t => t.status === 'จ่ายแล้ว');
-    const monthPaidIncome = periodPaidTx.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const periodTotal = periodTxs.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const periodTransfer = periodTxs.filter(t => t.status === 'จ่ายแล้ว' && t.paymentMethod === 'เงินโอน').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const periodCash = periodTxs.filter(t => t.status === 'จ่ายแล้ว' && t.paymentMethod === 'เงินสด').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const periodPendingTxs = periodTxs.filter(t => t.status === 'ค้างจ่าย');
+    const periodPendingAmt = periodPendingTxs.reduce((s, c) => s + (Number(c.amount) || 0), 0);
 
-    const monthTransferTx = periodPaidTx.filter(t => t.paymentMethod === 'เงินโอน');
-    const monthCashTx = periodPaidTx.filter(t => t.paymentMethod === 'เงินสด');
+    document.getElementById('dash-total-income').textContent = `฿${allPaid.toLocaleString()}`;
+    document.getElementById('dash-month-income').textContent = `฿${periodTotal.toLocaleString()}`;
+    document.getElementById('dash-month-transfer').textContent = `฿${periodTransfer.toLocaleString()}`;
+    document.getElementById('dash-month-cash').textContent = `฿${periodCash.toLocaleString()}`;
+    document.getElementById('dash-pending-amount').textContent = `฿${periodPendingAmt.toLocaleString()}`;
 
-    const monthTransferTotal = monthTransferTx.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    const monthCashTotal = monthCashTx.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-
-    const monthPendingTx = periodTx.filter(t => t.status === 'ค้างจ่าย');
-    const monthPendingAmount = monthPendingTx.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-
-    // ยอดรวมทั้งหมดจริง ๆ (รวมยอดจ่ายแล้ว + ยอดค้างจ่าย)
-    const monthTotalRevenue = periodTx.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-
-    const transferPct = monthPaidIncome > 0 ? Math.round((monthTransferTotal / monthPaidIncome) * 100) : 0;
-    const cashPct = monthPaidIncome > 0 ? Math.round((monthCashTotal / monthPaidIncome) * 100) : 0;
-
-    const periodLabel = selMonth === 'all' ? `ทั้งปี ${selYear}` : `เดือน${selMonth} ${selYear}`;
-
-    // Update Card Titles & Values
-    const card2Title = document.getElementById('dash-card2-title');
-    const card3Title = document.getElementById('dash-card3-title');
-    const card4Title = document.getElementById('dash-card4-title');
-    const card5Title = document.getElementById('dash-card5-title');
-
-    if (card2Title) card2Title.textContent = `รายรับรวม (${periodLabel})`;
-    if (card3Title) card3Title.textContent = `เงินโอน (${periodLabel})`;
-    if (card4Title) card4Title.textContent = `เงินสด (${periodLabel})`;
-    if (card5Title) card5Title.textContent = `ยอดค้างจ่าย (${periodLabel})`;
-
-    const totalIncomeEl = document.getElementById('dash-total-income');
-    const curMonthEl = document.getElementById('dash-month-income');
-    const monthNameEl = document.getElementById('dash-month-name');
-    const pendingEl = document.getElementById('dash-pending-amount');
-    const pendingCountEl = document.getElementById('dash-pending-count');
-    const pendingSubtextEl = document.getElementById('dash-pending-subtext');
-
-    if (totalIncomeEl) totalIncomeEl.textContent = `฿${totalIncome.toLocaleString()}`;
-    if (curMonthEl) curMonthEl.textContent = `฿${monthTotalRevenue.toLocaleString()}`;
-    if (monthNameEl) {
-      if (monthPendingAmount > 0) {
-        monthNameEl.innerHTML = `<span class="text-emerald-700 font-semibold">รับแล้ว ฿${monthPaidIncome.toLocaleString()}</span> · <span class="text-amber-700 font-semibold">ค้าง ฿${monthPendingAmount.toLocaleString()}</span>`;
-      } else {
-        monthNameEl.textContent = `ยอดรวมทั้งหมด ${periodLabel} (ชำระครบ 100%)`;
-      }
-    }
-    if (pendingEl) pendingEl.textContent = `฿${monthPendingAmount.toLocaleString()}`;
-    if (pendingCountEl) pendingCountEl.textContent = `${monthPendingTx.length} รายการ`;
-    if (pendingSubtextEl) pendingSubtextEl.innerHTML = `ค้างใน${periodLabel} <span class="text-slate-400 font-normal">(รวมทุกเดือน ฿${totalPendingAmount.toLocaleString()})</span>`;
-
-    // Top Metric Cards for Transfer & Cash
-    const monthTransferEl = document.getElementById('dash-month-transfer');
-    const monthTransferCountEl = document.getElementById('dash-month-transfer-count');
-    const monthCashEl = document.getElementById('dash-month-cash');
-    const monthCashCountEl = document.getElementById('dash-month-cash-count');
-
-    if (monthTransferEl) monthTransferEl.textContent = `฿${monthTransferTotal.toLocaleString()}`;
-    if (monthTransferCountEl) monthTransferCountEl.textContent = `${monthTransferTx.length} รายการ`;
-    if (monthCashEl) monthCashEl.textContent = `฿${monthCashTotal.toLocaleString()}`;
-    if (monthCashCountEl) monthCashCountEl.textContent = `${monthCashTx.length} รายการ`;
-
-    // Right Breakdown Panel (ยอดค้างจ่าย แยกตามรายคน)
-    const panelTitle = document.getElementById('dash-panel-title');
-    const panelMonthNameEl = document.getElementById('dash-panel-month-name');
-    const panelMonthTotalEl = document.getElementById('dash-panel-month-total');
-    const panelStudentCountEl = document.getElementById('dash-panel-student-count');
-    const studentListContainer = document.getElementById('dash-student-breakdown-list');
-
-    // Group monthPendingTx by student
-    const studentUnpaidMap = {};
-    monthPendingTx.forEach(t => {
-      const name = t.studentName ? t.studentName.trim() : 'ไม่ระบุชื่อ';
-      if (!studentUnpaidMap[name]) {
-        const stRecord = this.state.students.find(s => s.name && s.name.trim() === name);
-        studentUnpaidMap[name] = {
-          name: name,
-          grade: (stRecord && stRecord.grade) || t.grade || '-',
-          count: 0,
-          totalAmount: 0,
-          groups: new Set()
-        };
-      }
-      studentUnpaidMap[name].count += 1;
-      studentUnpaidMap[name].totalAmount += (Number(t.amount) || 0);
-      if (t.group) studentUnpaidMap[name].groups.add(t.group);
+    // Grade revenue breakdown in period
+    const gradeMap = {};
+    periodTxs.forEach(t => {
+      const g = t.grade || 'ไม่ระบุชั้น';
+      gradeMap[g] = (gradeMap[g] || 0) + (Number(t.amount) || 0);
     });
-
-    const studentUnpaidList = Object.values(studentUnpaidMap).sort((a, b) => b.totalAmount - a.totalAmount);
-
-    if (panelTitle) panelTitle.textContent = `ยอดค้างจ่าย (${periodLabel})`;
-    if (panelMonthNameEl) panelMonthNameEl.textContent = `แยกตามรายคน (${studentUnpaidList.length} คน)`;
-    if (panelMonthTotalEl) panelMonthTotalEl.textContent = `฿${monthPendingAmount.toLocaleString()}`;
-    if (panelStudentCountEl) panelStudentCountEl.textContent = `${studentUnpaidList.length} คน • ${monthPendingTx.length} คาบ`;
-
-    if (studentListContainer) {
-      if (studentUnpaidList.length === 0) {
-        studentListContainer.innerHTML = `
-          <div class="py-12 text-center text-slate-400 text-xs">
-            <div class="text-2xl mb-1.5">🎉</div>
-            <div class="font-bold text-slate-700">ไม่มีรายการค้างจ่ายใน${periodLabel}</div>
-            <div class="text-[11px] text-slate-400 mt-0.5">นักเรียนทุกคนชำระครบถ้วนแล้ว</div>
-          </div>
-        `;
+    const gradeEntries = Object.entries(gradeMap).sort((a, b) => b[1] - a[1]);
+    const gradeListEl = document.getElementById('dash-grade-breakdown');
+    if (gradeListEl) {
+      if (gradeEntries.length === 0) {
+        gradeListEl.innerHTML = `<div class="py-6 text-center text-slate-400 text-xs">ไม่มีข้อมูลในช่วงเวลานี้</div>`;
       } else {
-        studentListContainer.innerHTML = studentUnpaidList.map((st, idx) => {
-          const safeName = encodeURIComponent(st.name);
-          const groupsStr = Array.from(st.groups).join(', ');
+        gradeListEl.innerHTML = gradeEntries.map(([g, amt]) => {
+          const pct = periodTotal > 0 ? Math.round((amt / periodTotal) * 100) : 0;
           return `
-            <div class="py-2.5 px-2 hover:bg-amber-50/40 rounded-xl transition flex items-center justify-between gap-2.5 text-xs">
-              <div class="flex items-center gap-2.5 min-w-0">
-                <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                  ${idx + 1}
-                </span>
-                <div class="min-w-0">
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-slate-900 truncate">${st.name}</span>
-                    <span class="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px] font-bold flex-shrink-0">${st.grade}</span>
-                  </div>
-                  <div class="text-[10px] text-amber-700 font-medium flex items-center gap-1.5 mt-0.5 truncate">
-                    <span>⚠️ ค้าง ${st.count} คาบ</span>
-                    ${groupsStr ? `<span class="text-slate-300">•</span><span class="text-slate-400 font-normal truncate">${groupsStr}</span>` : ''}
-                  </div>
-                </div>
+            <div class="py-2">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="font-bold text-slate-700 dark:text-zinc-200">ชั้น ${g}</span>
+                <span class="font-bold text-emerald-400">฿${amt.toLocaleString()} (${pct}%)</span>
               </div>
-
-              <div class="flex items-center gap-2 flex-shrink-0">
-                <div class="text-right">
-                  <div class="font-black text-red-600 text-xs">฿${st.totalAmount.toLocaleString()}</div>
-                </div>
-                <button type="button" onclick="App.openSlipModal(decodeURIComponent('${safeName}'))" class="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs transition shadow-xs" title="สร้างสลิปทวงยอด">
-                  📸
-                </button>
+              <div class="w-full h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                <div class="h-full bg-emerald-500 rounded-full" style="width: ${pct}%"></div>
               </div>
             </div>
           `;
@@ -1470,990 +1611,159 @@ const App = {
     this.renderCharts();
   },
 
-  setDashboardMonth: function(monthVal) {
-    this.state.dashSelectedMonth = monthVal;
-    this.renderDashboard();
-  },
-
-  setDashboardYear: function(yearVal) {
-    this.state.dashSelectedYear = yearVal;
-    this.renderDashboard();
-  },
-
-  resetDashboardToCurrent: function() {
-    const now = new Date();
-    this.state.dashSelectedYear = String(now.getFullYear());
-    this.state.dashSelectedMonth = getThaiMonth(now.toISOString().split('T')[0]);
-    this.renderDashboard();
-    this.showToast(`เปลี่ยนกลับเป็นเดือนปัจจุบัน (${this.state.dashSelectedMonth} ${this.state.dashSelectedYear})`, 'info');
-  },
-
-  prevDashboardMonth: function() {
-    const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    let curIdx = months.indexOf(this.state.dashSelectedMonth);
-    let curYr = parseInt(this.state.dashSelectedYear, 10) || 2026;
-    if (curIdx === -1 || curIdx === 0) {
-      curIdx = 11;
-      curYr -= 1;
-    } else {
-      curIdx -= 1;
-    }
-    this.state.dashSelectedMonth = months[curIdx];
-    this.state.dashSelectedYear = String(curYr);
-    this.renderDashboard();
-  },
-
-  nextDashboardMonth: function() {
-    const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    let curIdx = months.indexOf(this.state.dashSelectedMonth);
-    let curYr = parseInt(this.state.dashSelectedYear, 10) || 2026;
-    if (curIdx === -1 || curIdx === 11) {
-      curIdx = 0;
-      curYr += 1;
-    } else {
-      curIdx += 1;
-    }
-    this.state.dashSelectedMonth = months[curIdx];
-    this.state.dashSelectedYear = String(curYr);
-    this.renderDashboard();
-  },
-
-  viewDashboardPendingTransactions: function() {
-    this.state.filter.status = 'ค้างจ่าย';
-    this.state.filter.year = this.state.dashSelectedYear;
-    this.state.filter.month = this.state.dashSelectedMonth === 'all' ? 'all' : this.state.dashSelectedMonth;
-    this.state.filter.quickChip = 'all';
-    this.state.page = 1;
-    this.switchTab('transactions');
-  },
-
   renderCharts: function() {
-    if (typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('chart-monthly-trend');
+    if (!canvas || typeof Chart === 'undefined') return;
 
-    const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    const txList = this.state.transactions.filter(t => t.status === 'จ่ายแล้ว');
+    const isDark = document.documentElement.classList.contains('dark');
+    const textColor = isDark ? '#a1a1aa' : '#64748b';
+    const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
 
-    const monthly2025 = new Array(12).fill(0);
-    const monthly2026 = new Array(12).fill(0);
+    const data2025 = THAI_MONTHS.map(m =>
+      this.state.transactions
+        .filter(t => t.year === '2025' && t.month === m)
+        .reduce((s, c) => s + (Number(c.amount) || 0), 0)
+    );
 
-    txList.forEach(t => {
-      const amt = Number(t.amount) || 0;
-      const mIdx = months.indexOf(t.month);
-      if (mIdx !== -1) {
-        if (t.year === '2025' || (t.date && t.date.startsWith('2025'))) {
-          monthly2025[mIdx] += amt;
-        } else if (t.year === '2026' || (t.date && t.date.startsWith('2026'))) {
-          monthly2026[mIdx] += amt;
-        }
-      }
-    });
+    const data2026 = THAI_MONTHS.map(m =>
+      this.state.transactions
+        .filter(t => t.year === '2026' && t.month === m)
+        .reduce((s, c) => s + (Number(c.amount) || 0), 0)
+    );
 
-    const canvasTrend = document.getElementById('chart-monthly-trend');
-    if (canvasTrend) {
-      if (this.charts.trend) this.charts.trend.destroy();
-      const isDark = document.documentElement.classList.contains('dark');
-      const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
-      const textColor = isDark ? '#a1a1aa' : '#64748b';
+    if (this.charts.trend) {
+      this.charts.trend.destroy();
+    }
 
-      this.charts.trend = new Chart(canvasTrend, {
-        type: 'bar',
-        data: {
-          labels: months,
-          datasets: [
-            {
-              label: 'ปี 2025',
-              data: monthly2025,
-              backgroundColor: isDark ? '#27272a' : '#cbd5e1',
-              borderRadius: 4
-            },
-            {
-              label: 'ปี 2026',
-              data: monthly2026,
-              backgroundColor: '#10b981',
-              borderRadius: 4
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'top',
-              labels: {
-                color: isDark ? '#e4e4e7' : '#334155',
-                font: { family: "'Prompt', sans-serif" }
-              }
-            },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `${ctx.dataset.label}: ฿${ctx.raw.toLocaleString()}`
-              }
-            }
+    this.charts.trend = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: THAI_MONTHS,
+        datasets: [
+          {
+            label: 'ปี 2025',
+            data: data2025,
+            backgroundColor: isDark ? 'rgba(148, 163, 184, 0.35)' : 'rgba(148, 163, 184, 0.5)',
+            borderRadius: 6
           },
-          scales: {
-            x: {
-              grid: { color: gridColor },
-              ticks: {
-                color: textColor,
-                font: { family: "'Prompt', sans-serif" }
-              }
-            },
-            y: {
-              beginAtZero: true,
-              grid: { color: gridColor },
-              ticks: {
-                color: textColor,
-                font: { family: "'Prompt', sans-serif" },
-                callback: (val) => '฿' + (val >= 1000 ? (val/1000) + 'k' : val)
-              }
-            }
+          {
+            label: 'ปี 2026',
+            data: data2026,
+            backgroundColor: '#10b981',
+            borderRadius: 6
           }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: textColor, font: { family: 'Prompt', size: 11 } } }
+        },
+        scales: {
+          x: { ticks: { color: textColor, font: { family: 'Prompt', size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: textColor, font: { family: 'Prompt', size: 10 } }, grid: { color: gridColor } }
         }
-      });
-    }
-  },
-
-  // ----------------- ⚠️ UNPAID TRACKER & SLIP GENERATOR -----------------
-  updateUnpaidBadge: function() {
-    const pending = this.state.transactions.filter(t => t.status === 'ค้างจ่าย');
-    const badge = document.getElementById('nav-unpaid-badge');
-    const mBadge = document.getElementById('m-nav-unpaid-badge');
-    const studentCount = pending.length > 0 ? new Set(pending.map(t => t.studentName ? t.studentName.trim() : '')).size : 0;
-
-    if (badge) {
-      if (studentCount > 0) {
-        badge.textContent = `${studentCount} คน`;
-        badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
       }
-    }
-    if (mBadge) {
-      if (studentCount > 0) {
-        mBadge.textContent = `${studentCount}`;
-        mBadge.classList.remove('hidden');
-      } else {
-        mBadge.classList.add('hidden');
-      }
-    }
-  },
-
-  onUnpaidSearch: function(val) {
-    this.state.unpaidSearch = val;
-    this.renderUnpaidTracker();
-  },
-
-  onUnpaidSort: function(val) {
-    this.state.unpaidSort = val;
-    this.renderUnpaidTracker();
-  },
-
-  setUnpaidGradeFilter: function(grade) {
-    this.state.unpaidGradeFilter = grade;
-    this.renderUnpaidTracker();
-  },
-
-  getUnpaidStudentsData: function() {
-    const pendingTxs = this.state.transactions.filter(t => t.status === 'ค้างจ่าย');
-    const studentMap = {};
-
-    pendingTxs.forEach(t => {
-      const name = t.studentName ? t.studentName.trim() : 'ไม่ระบุชื่อ';
-      if (!studentMap[name]) {
-        const stRecord = this.state.students.find(s => s.name && s.name.trim() === name);
-        studentMap[name] = {
-          name: name,
-          grade: (stRecord && stRecord.grade) || t.grade || '-',
-          group: (stRecord && stRecord.group) || t.group || '-',
-          transactions: [],
-          totalAmount: 0
-        };
-      }
-      studentMap[name].transactions.push(t);
-      studentMap[name].totalAmount += (Number(t.amount) || 0);
     });
-
-    Object.values(studentMap).forEach(s => {
-      s.transactions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    });
-
-    return {
-      pendingTxs,
-      studentList: Object.values(studentMap)
-    };
   },
 
-  renderUnpaidTracker: function() {
-    this.updateUnpaidBadge();
-    const { pendingTxs, studentList } = this.getUnpaidStudentsData();
+  // ==================== 👥 TAB 5: STUDENTS & GROUPS (WITH HISTORY RENAME CASCADE) ====================
+  setMasterGradeFilter: function(g) {
+    this.state.masterGradeFilter = g;
+    this.renderMaster();
+  },
 
-    // Update Stats
-    const statStudentsEl = document.getElementById('unpaid-stat-students');
-    const statSessionsEl = document.getElementById('unpaid-stat-sessions');
-    const statAmountEl = document.getElementById('unpaid-stat-amount');
-
-    const totalUnpaidSum = pendingTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-
-    if (statStudentsEl) statStudentsEl.textContent = `${studentList.length} คน`;
-    if (statSessionsEl) statSessionsEl.textContent = `${pendingTxs.length} รายการ`;
-    if (statAmountEl) statAmountEl.textContent = `฿${totalUnpaidSum.toLocaleString()}`;
-
-    // Render Grade Filter Chips
-    const gradesSet = new Set();
-    studentList.forEach(s => { if (s.grade && s.grade !== '-') gradesSet.add(s.grade); });
-    const order = ['ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6', 'ป.6'];
-    const sortedGrades = Array.from(gradesSet).sort((a, b) => {
-      const idxA = order.indexOf(a);
-      const idxB = order.indexOf(b);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return a.localeCompare(b, 'th');
-    });
-
-    const gradeChipsContainer = document.getElementById('unpaid-grade-chips');
-    if (gradeChipsContainer) {
-      const currentGrade = this.state.unpaidGradeFilter || 'all';
-      const allGrades = ['all', ...sortedGrades];
-      gradeChipsContainer.innerHTML = allGrades.map(g => {
-        const isSelected = g === currentGrade;
-        const label = g === 'all' ? 'ทั้งหมด' : g;
+  renderMaster: function() {
+    // Grade Filter Chips
+    const chipContainer = document.getElementById('master-grade-chips');
+    if (chipContainer) {
+      const grades = ['all', ...this.getGradeList()];
+      chipContainer.innerHTML = grades.map(g => {
+        const active = this.state.masterGradeFilter === g;
         return `
-          <button type="button" onclick="App.setUnpaidGradeFilter('${g}')" class="px-3 py-1 rounded-full text-xs font-semibold transition ${isSelected ? 'bg-amber-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
-            ${label}
+          <button type="button" onclick="App.setMasterGradeFilter('${g}')"
+            class="px-3 py-1 rounded-full text-xs font-bold transition ${
+              active
+                ? 'bg-emerald-500 text-zinc-950'
+                : 'surface-elevated text-slate-500 dark:text-zinc-400'
+            }">
+            ${g === 'all' ? 'ทั้งหมด (' + this.state.students.length + ')' : g}
           </button>
         `;
       }).join('');
     }
 
-    // Filter by search & grade
-    let filtered = studentList.filter(s => {
-      if (this.state.unpaidGradeFilter !== 'all' && s.grade !== this.state.unpaidGradeFilter) {
-        return false;
-      }
-      if (this.state.unpaidSearch) {
-        const q = this.state.unpaidSearch.toLowerCase().trim();
-        const matchesName = s.name.toLowerCase().includes(q);
-        const matchesGrade = s.grade.toLowerCase().includes(q);
-        return matchesName || matchesGrade;
-      }
-      return true;
-    });
-
-    // Sort students
-    const sortMode = this.state.unpaidSort || 'amount-desc';
-    if (sortMode === 'amount-desc') {
-      filtered.sort((a, b) => b.totalAmount - a.totalAmount);
-    } else if (sortMode === 'amount-asc') {
-      filtered.sort((a, b) => a.totalAmount - b.totalAmount);
-    } else if (sortMode === 'count-desc') {
-      filtered.sort((a, b) => b.transactions.length - a.transactions.length);
-    } else if (sortMode === 'name-asc') {
-      filtered.sort((a, b) => a.name.localeCompare(b.name, 'th'));
-    }
-
-    // Render Student Cards Grid
-    const gridEl = document.getElementById('unpaid-students-grid');
-    if (!gridEl) return;
-
-    if (filtered.length === 0) {
-      if (studentList.length === 0) {
-        gridEl.innerHTML = `
-          <div class="col-span-full py-16 text-center bg-white rounded-2xl border border-slate-200">
-            <div class="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-3xl mb-3 shadow-inner">🎉</div>
-            <h4 class="text-base font-bold text-slate-800">ไม่มีรายการค้างชำระ</h4>
-            <p class="text-xs text-slate-500 mt-1">ยอดเยี่ยมมาก! นักเรียนทุกคนชำระค่าเรียนครบถ้วนเรียบร้อยแล้ว</p>
-          </div>
-        `;
-      } else {
-        gridEl.innerHTML = `
-          <div class="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-200">
-            <div class="text-3xl mb-2 text-slate-400">🔍</div>
-            <h4 class="text-sm font-bold text-slate-700">ไม่พบนักเรียนตามเงื่อนไขที่ค้นหา</h4>
-            <p class="text-xs text-slate-400 mt-1">ลองเปลี่ยนคำค้นหาหรือตัวกรองระดับชั้น</p>
-          </div>
-        `;
-      }
-      return;
-    }
-
-    gridEl.innerHTML = filtered.map(st => {
-      const safeName = encodeURIComponent(st.name);
-      const sessionsCount = st.transactions.length;
-      const previewSessions = st.transactions.slice(0, 3);
-      const remainingCount = sessionsCount - previewSessions.length;
-
-      return `
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition space-y-3.5 flex flex-col justify-between">
-          <div>
-            <div class="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
-              <div>
-                <div class="flex items-center gap-2">
-                  <h3 class="font-bold text-slate-900 text-base leading-snug">${st.name}</h3>
-                  <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-bold">${st.grade}</span>
-                </div>
-                <div class="text-[11px] text-amber-700 font-semibold mt-0.5 flex items-center gap-1">
-                  <span>⚠️ ค้าง ${sessionsCount} คาบ</span>
-                  <span class="text-slate-300">•</span>
-                  <span class="text-slate-500 font-normal">กลุ่ม: ${st.group}</span>
-                </div>
-              </div>
-
-              <div class="text-right">
-                <div class="text-[10px] text-slate-400 font-medium">ยอดค้างรวม</div>
-                <div class="text-lg font-black text-red-600">฿${st.totalAmount.toLocaleString()}</div>
-              </div>
-            </div>
-
-            <div class="space-y-1.5 pt-2 text-xs">
-              ${previewSessions.map(tx => `
-                <div class="flex items-center justify-between py-1 px-2.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px]">
-                  <div class="flex items-center gap-2">
-                    <span class="text-slate-500 font-mono">${tx.date}</span>
-                    <span class="text-slate-700 font-medium">${tx.group || '-'}</span>
-                  </div>
-                  <span class="font-bold text-slate-800">฿${(Number(tx.amount) || 0).toLocaleString()}</span>
-                </div>
-              `).join('')}
-
-              ${remainingCount > 0 ? `
-                <div class="text-center text-[10px] text-slate-400 py-0.5 font-medium">
-                  + อีก ${remainingCount} รายการ
-                </div>
-              ` : ''}
-            </div>
-          </div>
-
-          <div class="pt-2 border-t border-slate-100 space-y-2">
-            <button type="button" onclick="App.openSlipModal(decodeURIComponent('${safeName}'))" class="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl shadow-sm shadow-emerald-200 transition flex items-center justify-center gap-1.5">
-              <span>📸</span> สร้างรูปภาพทวงยอด
-            </button>
-
-            <div class="grid grid-cols-2 gap-1.5 text-[11px]">
-              <button type="button" onclick="App.copySlipText(decodeURIComponent('${safeName}'))" class="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition flex items-center justify-center gap-1">
-                <span>💬</span> ส่ง LINE
-              </button>
-              <button type="button" onclick="App.markAllPaidForStudent(decodeURIComponent('${safeName}'))" class="py-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg border border-amber-200 transition flex items-center justify-center gap-1">
-                <span>✓</span> ปิดยอด
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  },
-
-  openSlipModal: function(studentName) {
-    this.state.currentSlipStudentName = studentName;
-    const { studentList } = this.getUnpaidStudentsData();
-    const st = studentList.find(s => s.name === studentName);
-    if (!st) {
-      this.showToast('ไม่พบข้อมูลรายการค้างจ่ายของนักเรียน', 'error');
-      return;
-    }
-
-    this.state.currentSlipBlob = null;
-    this.state.currentSlipFile = null;
-    this.state.currentSlipDataUrl = null;
-
-    this.generateSlipCanvas(st);
-    const modal = document.getElementById('slip-modal');
-    if (modal) modal.classList.remove('hidden');
-  },
-
-  closeSlipModal: function() {
-    const modal = document.getElementById('slip-modal');
-    if (modal) modal.classList.add('hidden');
-    this.state.currentSlipStudentName = null;
-  },
-
-  generateSlipCanvas: function(st) {
-    const canvas = document.getElementById('slip-canvas');
-    if (!canvas) return;
-
-    const txs = st.transactions || [];
-    const scale = 2; // Retina sharpness
-
-    // Compact 370px card width: eliminates huge gap and fits completely inside any iPad/mobile screen without clipping
-    const width = 370;
-    const paddingX = 14;
-    const innerWidth = width - (paddingX * 2); // 342
-    const rowHeight = 27;
-    const tableHeight = 30 + (txs.length * rowHeight);
-    const height = 105 + 78 + tableHeight + 56 + 46 + 12;
-
-    canvas.width = width * scale;
-    canvas.height = height * scale;
-
-    const ctx = canvas.getContext('2d');
-    ctx.scale(scale, scale);
-
-    function roundRect(x, y, w, h, radius, fill, stroke, strokeColor = '#e2e8f0', fillColor = '#ffffff') {
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + w - radius, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-      ctx.lineTo(x + w, y + h - radius);
-      ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-      ctx.lineTo(x + radius, y + h);
-      ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-      ctx.closePath();
-      if (fill) {
-        ctx.fillStyle = fillColor;
-        ctx.fill();
-      }
-      if (stroke) {
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-    }
-
-    // 1. Base card background
-    roundRect(0, 0, width, height, 16, true, true, '#cbd5e1', '#ffffff');
-
-    // 2. Header Banner with Emerald Gradient
-    const headerGrad = ctx.createLinearGradient(0, 0, width, 100);
-    headerGrad.addColorStop(0, '#065f46');
-    headerGrad.addColorStop(1, '#0f766e');
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(16, 0);
-    ctx.lineTo(width - 16, 0);
-    ctx.quadraticCurveTo(width, 0, width, 16);
-    ctx.lineTo(width, 95);
-    ctx.lineTo(0, 95);
-    ctx.lineTo(0, 16);
-    ctx.quadraticCurveTo(0, 0, 16, 0);
-    ctx.closePath();
-    ctx.fillStyle = headerGrad;
-    ctx.fill();
-    ctx.restore();
-
-    // Header Logo Icon
-    roundRect(16, 16, 38, 38, 9, true, false, null, '#ffffff');
-    ctx.fillStyle = '#059669';
-    ctx.font = 'bold 17px "Prompt", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('M+', 35, 35);
-
-    // Header Titles
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#a7f3d0';
-    ctx.font = '500 10.5px "Prompt", sans-serif';
-    ctx.fillText('MONEY PLUS ACADEMY', 62, 30);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 16.5px "Prompt", sans-serif';
-    ctx.fillText('ใบแจ้งยอดค้างชำระค่าเรียน', 62, 51);
-
-    const now = new Date();
-    const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    const dateStr = `วันที่ออกเอกสาร: ${now.getDate()} ${thaiMonths[now.getMonth()]} ${now.getFullYear() + 543}`;
-    ctx.fillStyle = '#d1fae5';
-    ctx.font = '400 10px "Prompt", sans-serif';
-    ctx.fillText(dateStr, 62, 69);
-
-    let curY = 108;
-
-    // 3. Student Information Card
-    roundRect(paddingX, curY, innerWidth, 68, 10, true, true, '#e2e8f0', '#f8fafc');
-
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 15px "Prompt", sans-serif';
-    ctx.fillText(`นักเรียน: ${st.name}`, paddingX + 12, curY + 26);
-
-    // Grade Tag
-    const gradeTagW = 66;
-    const gradeTagX = width - paddingX - 10 - gradeTagW;
-    roundRect(gradeTagX, curY + 11, gradeTagW, 21, 6, true, true, '#bbf7d0', '#f0fdf4');
-    ctx.fillStyle = '#166534';
-    ctx.font = 'bold 10.5px "Prompt", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`ชั้น: ${st.grade || '-'}`, gradeTagX + (gradeTagW / 2), curY + 25);
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#64748b';
-    ctx.font = '400 11.5px "Prompt", sans-serif';
-    ctx.fillText(`กลุ่มเรียน: ${st.group || '-'}`, paddingX + 12, curY + 50);
-
-    ctx.fillStyle = '#b45309';
-    ctx.font = 'bold 11.5px "Prompt", sans-serif';
-    ctx.fillText(`⚠️ ค้างชำระ: ${txs.length} คาบ`, paddingX + 145, curY + 50);
-
-    curY += 78;
-
-    // 4. Breakdown Table
-    // Table Header
-    roundRect(paddingX, curY, innerWidth, 26, 6, true, false, null, '#f1f5f9');
-    ctx.fillStyle = '#475569';
-    ctx.font = 'bold 10.5px "Prompt", sans-serif';
-    ctx.fillText('#', paddingX + 10, curY + 17);
-    ctx.fillText('วันที่เรียน', paddingX + 32, curY + 17);
-    ctx.fillText('รอบ / กลุ่ม', paddingX + 135, curY + 17);
-    ctx.textAlign = 'right';
-    ctx.fillText('จำนวนเงิน', width - paddingX - 12, curY + 17);
-    ctx.textAlign = 'left';
-
-    curY += 28;
-
-    // Table Rows
-    txs.forEach((tx, idx) => {
-      const isEven = idx % 2 === 0;
-      if (isEven) {
-        roundRect(paddingX, curY, innerWidth, rowHeight - 2, 4, true, false, null, '#fafafa');
-      }
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '10px "Prompt", sans-serif';
-      ctx.fillText(String(idx + 1), paddingX + 10, curY + 17);
-
-      ctx.fillStyle = '#1e293b';
-      ctx.font = '500 11px "Prompt", sans-serif';
-      ctx.fillText(tx.date || '-', paddingX + 32, curY + 17);
-
-      ctx.fillStyle = '#475569';
-      ctx.font = '400 11px "Prompt", sans-serif';
-      ctx.fillText(tx.group || '-', paddingX + 135, curY + 17);
-
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#0f172a';
-      ctx.font = 'bold 11.5px "Prompt", sans-serif';
-      ctx.fillText(`฿${(Number(tx.amount) || 0).toLocaleString()}`, width - paddingX - 12, curY + 17);
-      ctx.textAlign = 'left';
-
-      curY += rowHeight;
-    });
-
-    curY += 8;
-
-    // 5. Total Amount Due Box
-    roundRect(paddingX, curY, innerWidth, 50, 10, true, true, '#a7f3d0', '#ecfdf5');
-    ctx.fillStyle = '#065f46';
-    ctx.font = 'bold 12px "Prompt", sans-serif';
-    ctx.fillText('ยอดรวมที่ต้องชำระทั้งสิ้น', paddingX + 14, curY + 30);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#047857';
-    ctx.font = '900 18px "Prompt", sans-serif';
-    ctx.fillText(`฿${st.totalAmount.toLocaleString()}`, width - paddingX - 12, curY + 32);
-    ctx.textAlign = 'left';
-
-    curY += 58;
-
-    // 6. Footer Notice
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#64748b';
-    ctx.font = '400 10.5px "Prompt", sans-serif';
-    ctx.fillText('ขอบพระคุณครับ/ค่ะ 🙏', width / 2, curY + 14);
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '400 9px "Prompt", sans-serif';
-    ctx.fillText('ระบบบันทึกการสอน Money Plus v.3', width / 2, curY + 28);
-
-    // Generate responsive preview img and pre-cache Blob & File
-    const previewImg = document.getElementById('slip-preview-img');
-    const dataUrl = canvas.toDataURL('image/png');
-    this.state.currentSlipDataUrl = dataUrl;
-    if (previewImg) {
-      previewImg.src = dataUrl;
-    }
-
-    if (canvas.toBlob) {
-      canvas.toBlob((blob) => {
-        if (blob) {
-          this.state.currentSlipBlob = blob;
-          const studentName = st.name || 'นักเรียน';
-          try {
-            this.state.currentSlipFile = new File([blob], `ใบแจ้งยอด_${studentName}.png`, { type: 'image/png' });
-          } catch (e) {
-            console.warn('File constructor not supported, using Blob', e);
-          }
-        }
-      }, 'image/png');
-    }
-  },
-
-  downloadSlipImage: function() {
-    const canvas = document.getElementById('slip-canvas');
-    if (!canvas) return;
-
-    const studentName = this.state.currentSlipStudentName || 'นักเรียน';
-    const filename = `ใบแจ้งยอด_${studentName}.png`;
-
-    // 1. Web Share API (Instant native sheet on iPadOS, iOS Safari & Android: lets user "Save Image" to Photos or send to LINE directly)
-    if (this.state.currentSlipFile && navigator.canShare && navigator.canShare({ files: [this.state.currentSlipFile] })) {
-      navigator.share({
-        files: [this.state.currentSlipFile],
-        title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
-        text: `ใบแจ้งยอดค้างชำระค่าเรียนของ ${studentName}`
-      }).then(() => {
-        this.showToast('แชร์/บันทึกรูปภาพเรียบร้อย 🎉', 'success');
-      }).catch(err => {
-        if (err.name === 'AbortError') return; // User closed sheet
-        console.warn('Share sheet dismissed, falling back to download', err);
-        this._executeDirectDownload(canvas, filename);
+    const stuContainer = document.getElementById('master-students-list');
+    if (stuContainer) {
+      const q = (this.state.masterSearch || '').toLowerCase();
+      const filtered = this.state.students.filter(s => {
+        if (this.state.masterGradeFilter !== 'all' && (s.grade || '').trim() !== this.state.masterGradeFilter) return false;
+        if (q && !s.name.toLowerCase().includes(q)) return false;
+        return true;
       });
-      return;
-    }
 
-    // 2. Fallback: try creating file if not ready yet
-    if (navigator.share && navigator.canShare && canvas.toBlob) {
-      canvas.toBlob(async (blob) => {
-        if (blob) {
-          try {
-            const file = new File([blob], filename, { type: 'image/png' });
-            if (navigator.canShare({ files: [file] })) {
-              await navigator.share({
-                files: [file],
-                title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
-                text: `ใบแจ้งยอดค้างชำระค่าเรียนของ ${studentName}`
-              });
-              this.showToast('แชร์/บันทึกรูปภาพเรียบร้อย 🎉', 'success');
-              return;
-            }
-          } catch (e) {
-            console.warn('Async share failed:', e);
-          }
-        }
-        this._executeDirectDownload(canvas, filename);
-      }, 'image/png');
-      return;
-    }
-
-    this._executeDirectDownload(canvas, filename);
-  },
-
-  _executeDirectDownload: function(canvas, filename) {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-    if (isIOS) {
-      // On iOS Safari without WebShare, opening in new tab lets user long press and tap "Save Image"
-      const dataUrl = this.state.currentSlipDataUrl || canvas.toDataURL('image/png');
-      const win = window.open();
-      if (win) {
-        win.document.write(`<title>${filename}</title><body style="margin:0;background:#18181b;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#fff;padding:16px;box-sizing:border-box;"><p style="margin-bottom:12px;font-size:14px;color:#a1a1aa;">แตะค้างที่รูปภาพด้านล่างเพื่อ <b>"บันทึกภาพ"</b> ลงอัลบั้ม</p><img src="${dataUrl}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.5);"></body>`);
-        this.showToast('เปิดรูปในแท็บใหม่แล้ว แตะค้างเพื่อบันทึกรูป', 'info');
-        return;
-      }
-    }
-
-    if (canvas.toBlob) {
-      canvas.toBlob(blob => {
-        if (!blob) {
-          this._fallbackDataUrlDownload(canvas, filename);
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = url;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }, 1500);
-        this.showToast('ดาวน์โหลดรูปภาพเรียบร้อย (หรือแตะค้างที่รูปเพื่อบันทึก)', 'info');
-      }, 'image/png');
-    } else {
-      this._fallbackDataUrlDownload(canvas, filename);
-    }
-  },
-
-  _fallbackDataUrlDownload: function(canvas, filename) {
-    const dataUrl = this.state.currentSlipDataUrl || canvas.toDataURL('image/png');
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = dataUrl;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      document.body.removeChild(link);
-    }, 1500);
-    this.showToast('ดาวน์โหลดรูปภาพเรียบร้อย', 'info');
-  },
-
-  copySlipImage: function() {
-    const canvas = document.getElementById('slip-canvas');
-    if (!canvas) return;
-
-    const studentName = this.state.currentSlipStudentName || 'นักเรียน';
-    const isTouchDevice = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-    // On iPad / iPhone, Web Share API lets users choose LINE directly
-    if (isTouchDevice && this.state.currentSlipFile && navigator.canShare && navigator.canShare({ files: [this.state.currentSlipFile] })) {
-      navigator.share({
-        files: [this.state.currentSlipFile],
-        title: `ใบแจ้งยอดค่าเรียน - ${studentName}`,
-        text: `ใบแจ้งยอดค้างชำระค่าเรียนของ ${studentName}`
-      }).then(() => {
-        this.showToast('ส่งรูปภาพเรียบร้อย 🎉', 'success');
-      }).catch((err) => {
-        if (err.name === 'AbortError') return;
-        this._tryClipboardCopy(canvas);
-      });
-      return;
-    }
-
-    this._tryClipboardCopy(canvas);
-  },
-
-  _tryClipboardCopy: function(canvas) {
-    if (navigator.clipboard && window.ClipboardItem && canvas.toBlob) {
-      canvas.toBlob(blob => {
-        if (!blob) {
-          this.downloadSlipImage();
-          return;
-        }
-        navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ]).then(() => {
-          this.showToast('คัดลอกรูปภาพแล้ว! กดวาง (Ctrl+V) ใน LINE ได้เลย', 'success');
-        }).catch(err => {
-          console.warn('Clipboard write failed, downloading/sharing instead', err);
-          this.downloadSlipImage();
-        });
-      }, 'image/png');
-    } else {
-      this.downloadSlipImage();
-    }
-  },
-
-  copySlipText: function(studentName) {
-    const { studentList } = this.getUnpaidStudentsData();
-    const st = studentList.find(s => s.name === studentName);
-    if (!st) {
-      this.showToast('ไม่พบข้อมูลนักเรียน', 'error');
-      return;
-    }
-
-    const settings = this.state.paymentSettings || {};
-    let text = `📢 แจ้งยอดค้างชำระค่าเรียนพิเศษ\n`;
-    text += `นักเรียน: ${st.name} (${st.grade})\n`;
-    text += `------------------------------------\n`;
-    text += `รายการค้างชำระ (${st.transactions.length} คาบ):\n`;
-    st.transactions.forEach((tx, idx) => {
-      text += `${idx + 1}. ${tx.date} (${tx.group}): ฿${(Number(tx.amount) || 0).toLocaleString()}\n`;
-    });
-    text += `------------------------------------\n`;
-    text += `💰 ยอดรวมที่ต้องชำระ: ฿${st.totalAmount.toLocaleString()} บาท\n\n`;
-    text += `ขอบพระคุณครับ/ค่ะ 🙏`;
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        this.showToast(`คัดลอกข้อความสรุปของ ${st.name} แล้ว`, 'success');
-      }).catch(() => {
-        this.showToast('ไม่สามารถคัดลอกข้อความได้', 'error');
-      });
-    }
-  },
-
-  copySlipTextCurrent: function() {
-    if (this.state.currentSlipStudentName) {
-      this.copySlipText(this.state.currentSlipStudentName);
-    }
-  },
-
-  markCurrentSlipStudentPaid: function() {
-    if (this.state.currentSlipStudentName) {
-      const name = this.state.currentSlipStudentName;
-      this.closeSlipModal();
-      this.markAllPaidForStudent(name);
-    }
-  },
-
-  markAllPaidForStudent: function(studentName) {
-    const pendingForStudent = this.state.transactions.filter(t => t.studentName === studentName && t.status === 'ค้างจ่าย');
-    if (pendingForStudent.length === 0) {
-      this.showToast('ไม่มีรายการค้างชำระสำหรับนักเรียนนี้', 'info');
-      return;
-    }
-
-    this.openConfirmModal({
-      title: 'ยืนยันการปิดยอดชำระ',
-      message: `ต้องการเปลี่ยนสถานะรายการค้างจ่ายทั้งหมดของ "${studentName}" (${pendingForStudent.length} รายการ รวม ฿${pendingForStudent.reduce((s, c) => s + (Number(c.amount) || 0), 0).toLocaleString()}) เป็น "จ่ายแล้ว" ใช่หรือไม่?`,
-      confirmText: '✓ ยืนยันชำระแล้ว',
-      confirmClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-      onConfirm: () => {
-        pendingForStudent.forEach(t => {
-          t.status = 'จ่ายแล้ว';
-          if (!t.paymentMethod || t.paymentMethod === '-') {
-            t.paymentMethod = 'เงินโอน';
-          }
-        });
-        this.saveData();
-        this.updateUnpaidBadge();
-        if (this.state.activeTab === 'unpaid') {
-          this.renderUnpaidTracker();
-        } else {
-          this.render();
-        }
-        this.showToast(`บันทึกชำระเงินของ "${studentName}" เรียบร้อยแล้ว`, 'success');
-      }
-    });
-  },
-
-  openPaymentSettingsModal: function() {
-    const s = this.state.paymentSettings || {};
-    const accNameInput = document.getElementById('setting-account-name');
-    const bankNameInput = document.getElementById('setting-bank-name');
-    const accNumInput = document.getElementById('setting-account-number');
-    const promptPayInput = document.getElementById('setting-promptpay');
-    const noteInput = document.getElementById('setting-note');
-
-    if (accNameInput) accNameInput.value = s.accountName || '';
-    if (bankNameInput) bankNameInput.value = s.bankName || '';
-    if (accNumInput) accNumInput.value = s.accountNumber || '';
-    if (promptPayInput) promptPayInput.value = s.promptPay || '';
-    if (noteInput) noteInput.value = s.note || '';
-
-    const modal = document.getElementById('payment-settings-modal');
-    if (modal) modal.classList.remove('hidden');
-  },
-
-  closePaymentSettingsModal: function() {
-    const modal = document.getElementById('payment-settings-modal');
-    if (modal) modal.classList.add('hidden');
-  },
-
-  savePaymentSettings: function() {
-    const accNameInput = document.getElementById('setting-account-name');
-    const bankNameInput = document.getElementById('setting-bank-name');
-    const accNumInput = document.getElementById('setting-account-number');
-    const promptPayInput = document.getElementById('setting-promptpay');
-    const noteInput = document.getElementById('setting-note');
-
-    this.state.paymentSettings = {
-      accountName: accNameInput ? accNameInput.value.trim() : '',
-      bankName: bankNameInput ? bankNameInput.value.trim() : '',
-      accountNumber: accNumInput ? accNumInput.value.trim() : '',
-      promptPay: promptPayInput ? promptPayInput.value.trim() : '',
-      note: noteInput ? noteInput.value.trim() : ''
-    };
-
-    localStorage.setItem('money_plus_v3_payment_settings', JSON.stringify(this.state.paymentSettings));
-    this.closePaymentSettingsModal();
-    this.showToast('บันทึกข้อมูลบัญชีรับเงินเรียบร้อยแล้ว', 'success');
-
-    if (this.state.currentSlipStudentName) {
-      const { studentList } = this.getUnpaidStudentsData();
-      const st = studentList.find(s => s.name === this.state.currentSlipStudentName);
-      if (st) this.generateSlipCanvas(st);
-    }
-  },
-
-  // ----------------- MASTER DATA RENDER & MODALS -----------------
-  renderMaster: function() {
-    const stuListContainer = document.getElementById('master-students-list');
-    const grpListContainer = document.getElementById('master-groups-list');
-
-    if (stuListContainer) {
-      const currentFilter = this.state.masterGradeFilter || 'all';
-      let displayedStudents = this.state.students;
-      if (currentFilter === 'other') {
-        const knownGrades = this.getAvailableGrades();
-        displayedStudents = displayedStudents.filter(s => !s.grade || !knownGrades.includes(s.grade));
-      } else if (currentFilter !== 'all') {
-        displayedStudents = displayedStudents.filter(s => s.grade === currentFilter);
-      }
-
-      if (displayedStudents.length === 0) {
-        stuListContainer.innerHTML = `
-          <div class="col-span-2 p-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-            ไม่พบนักเรียนในระดับชั้นที่เลือก
-          </div>
-        `;
-      } else {
-        stuListContainer.innerHTML = displayedStudents.map((s, idx) => {
-          const studentTx = this.state.transactions.filter(t => t.studentName === s.name);
-          const totalPaid = studentTx.filter(t => t.status === 'จ่ายแล้ว').reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
-          return `
-            <div class="p-3.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2 hover:border-emerald-300 transition">
-              <div>
-                <div class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                  ${s.name}
-                  ${s.grade ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">${s.grade}</span>` : '<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">ไม่ระบุชั้น</span>'}
-                </div>
-                <div class="text-[11px] text-slate-600 mt-1 flex items-center gap-1">
-                  <span>ค่าเรียนมาตรฐาน: <strong class="text-emerald-700">฿${s.defaultFee || 200}</strong></span>
-                </div>
-                <div class="text-[10px] text-slate-400 font-medium mt-0.5">ประวัติ: รวมเรียน ${studentTx.length} คาบ (ชำระแล้ว ฿${totalPaid.toLocaleString()})</div>
-              </div>
-              <div class="flex items-center gap-1">
-                <button onclick="App.openStudentModal('${s.id}')" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded text-xs transition" title="แก้ไข">✏️</button>
-                <button onclick="App.deleteStudent('${s.id}')" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded text-xs transition" title="ลบ">🗑️</button>
-              </div>
-            </div>
-          `;
-        }).join('');
-      }
-    }
-
-    if (grpListContainer) {
-      grpListContainer.innerHTML = this.state.groups.map((g, idx) => {
+      stuContainer.innerHTML = filtered.map(s => {
+        const stuTxs = this.state.transactions.filter(t => t.studentName === s.name);
+        const unpaidAmt = stuTxs.filter(t => t.status === 'ค้างจ่าย').reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
         return `
-          <div class="p-3.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between hover:border-emerald-300 transition">
+          <div class="surface-elevated p-3.5 rounded-xl flex items-center justify-between gap-2">
             <div>
-              <div class="font-bold text-slate-900 text-sm">${g.name}</div>
-              <div class="text-[11px] text-slate-400 mt-0.5">รอบวันเรียนสำหรับจัดตารางสอน / เช็คชื่อ</div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-sm text-slate-900 dark:text-zinc-100">${s.name}</span>
+                <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500/15 text-emerald-400">${s.grade || '-'}</span>
+                <span class="text-xs font-bold text-slate-500 dark:text-zinc-400">฿${s.defaultFee || 200}/คาบ</span>
+              </div>
+              <div class="text-[11px] text-slate-400 dark:text-zinc-500 mt-0.5">
+                ประวัติเรียน ${stuTxs.length} คาบ ${unpaidAmt > 0 ? `· <span class="amber-high-contrast font-bold">ค้าง ฿${unpaidAmt.toLocaleString()}</span>` : ''}
+              </div>
             </div>
-            <div class="flex items-center gap-1.5">
-              <button onclick="App.deleteGroup('${g.id}')" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded text-xs transition" title="ลบกลุ่ม">🗑️</button>
+            <div class="flex items-center gap-1">
+              <button onclick="App.openStudentModal('${s.id}')" class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs transition" title="แก้ไข">✏️</button>
+              <button onclick="App.deleteStudent('${s.id}')" class="p-1.5 rounded-lg hover:bg-red-500/20 text-xs text-red-400 transition" title="ลบ">🗑️</button>
             </div>
           </div>
         `;
       }).join('');
     }
-  },
 
-  setMasterGradeFilter: function(gradeFilter) {
-    this.state.masterGradeFilter = gradeFilter;
-    
-    // Update chip styling
-    const container = document.getElementById('master-grade-filter-chips');
-    if (container) {
-      const buttons = container.querySelectorAll('button');
-      buttons.forEach(b => {
-        if (b.getAttribute('data-grade-filter') === gradeFilter) {
-          b.className = "px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-sm transition";
-        } else {
-          b.className = "px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition";
-        }
-      });
+    const grpContainer = document.getElementById('master-groups-list');
+    if (grpContainer) {
+      grpContainer.innerHTML = this.state.groups.map(g => `
+        <div class="surface-elevated p-3 rounded-xl flex items-center justify-between">
+          <span class="font-semibold text-xs text-slate-800 dark:text-zinc-200">👥 ${g.name}</span>
+          <button onclick="App.deleteGroup('${g.id}')" class="text-xs text-slate-400 hover:text-red-400 p-1">🗑️</button>
+        </div>
+      `).join('');
     }
-
-    this.renderMaster();
   },
 
-  // Student Modal (Add / Edit)
-  openStudentModal: function(stuId = null) {
+  openStudentModal: function(stuId) {
     this.state.editingStudentId = stuId;
     const titleEl = document.getElementById('student-modal-title');
     const nameInput = document.getElementById('student-modal-name');
     const gradeInput = document.getElementById('student-modal-grade');
     const feeInput = document.getElementById('student-modal-fee');
+    const cascadeWrap = document.getElementById('student-cascade-wrap');
+    const cascadeCheck = document.getElementById('student-cascade-history');
 
     if (stuId) {
       const s = this.state.students.find(x => x.id === stuId);
       if (!s) return;
+      this.state.editingStudentOriginalName = s.name;
       titleEl.textContent = 'แก้ไขข้อมูลนักเรียน';
       nameInput.value = s.name;
       gradeInput.value = s.grade || '';
       feeInput.value = s.defaultFee || 200;
+      if (cascadeWrap) cascadeWrap.classList.remove('hidden');
+      if (cascadeCheck) cascadeCheck.checked = true;
     } else {
+      this.state.editingStudentOriginalName = null;
       titleEl.textContent = 'เพิ่มนักเรียนใหม่';
       nameInput.value = '';
-      gradeInput.value = this.state.recordGrade !== 'all' && this.state.recordGrade !== 'other' ? this.state.recordGrade : 'ม.1';
+      gradeInput.value = this.state.recordGrade !== 'all' ? this.state.recordGrade : 'ม.4';
       feeInput.value = 200;
+      if (cascadeWrap) cascadeWrap.classList.add('hidden');
     }
 
     const modal = document.getElementById('student-dialog-modal');
@@ -2462,6 +1772,7 @@ const App = {
 
   closeStudentModal: function() {
     this.state.editingStudentId = null;
+    this.state.editingStudentOriginalName = null;
     const modal = document.getElementById('student-dialog-modal');
     if (modal) modal.classList.add('hidden');
   },
@@ -2472,17 +1783,36 @@ const App = {
       this.showToast('กรุณากรอกชื่อนักเรียน', 'error');
       return;
     }
-
     const grade = document.getElementById('student-modal-grade').value.trim();
     const fee = Number(document.getElementById('student-modal-fee').value) || 200;
+    const cascadeCheck = document.getElementById('student-cascade-history');
+    const shouldCascade = cascadeCheck ? cascadeCheck.checked : false;
 
     if (this.state.editingStudentId) {
       const s = this.state.students.find(x => x.id === this.state.editingStudentId);
       if (s) {
+        const oldName = this.state.editingStudentOriginalName || s.name;
         s.name = name;
         s.grade = grade;
         s.defaultFee = fee;
-        this.showToast(`อัปเดตข้อมูล ${name} เรียบร้อย`, 'success');
+
+        let updatedCount = 0;
+        if (shouldCascade && oldName) {
+          this.state.transactions.forEach(t => {
+            if (t.studentName === oldName) {
+              t.studentName = name;
+              if (grade) t.grade = grade;
+              updatedCount++;
+            }
+          });
+        }
+
+        this.showToast(
+          updatedCount > 0
+            ? `อัปเดต "${name}" และเปลี่ยนชื่อในประวัติเดิม ${updatedCount} รายการแล้ว`
+            : `อัปเดตข้อมูล "${name}" เรียบร้อย`,
+          'success'
+        );
       }
     } else {
       this.state.students.push({
@@ -2491,35 +1821,33 @@ const App = {
         grade: grade,
         defaultFee: fee
       });
-      this.showToast(`เพิ่มนักเรียน ${name} เรียบร้อย`, 'success');
+      this.showToast(`เพิ่มนักเรียน "${name}" เรียบร้อย`, 'success');
     }
 
-    this.saveData();
+    this.saveData(false);
     this.closeStudentModal();
-    this.renderMaster();
-    this.renderQuickRecord();
+    this.populateSessionStudents();
+    this.render();
   },
 
   deleteStudent: function(stuId) {
     const s = this.state.students.find(x => x.id === stuId);
     if (!s) return;
-
     this.openConfirmModal({
       title: 'ลบรายชื่อนักเรียน',
-      message: `คุณต้องการลบรายชื่อนักเรียน "${s.name}" หรือไม่? (ประวัติการเรียนเดิมในระบบจะไม่ถูกลบ)`,
-      confirmText: 'ลบนักเรียน',
+      message: `ต้องการลบ "${s.name}" ออกจากรายชื่อเช็คชื่อหรือไม่? (ประวัติการเรียนเดิมจะไม่ถูกลบ)`,
+      confirmText: 'ลบรายชื่อ',
       confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
       onConfirm: () => {
         this.state.students = this.state.students.filter(x => x.id !== stuId);
-        this.saveData();
-        this.renderMaster();
-        this.renderQuickRecord();
-        this.showToast(`ลบ ${s.name} เรียบร้อย`, 'info');
+        this.saveData(false);
+        this.populateSessionStudents();
+        this.render();
+        this.showToast(`ลบ "${s.name}" เรียบร้อย`, 'info');
       }
     });
   },
 
-  // Group Modal (Add)
   openGroupModal: function() {
     document.getElementById('group-modal-name').value = '';
     const modal = document.getElementById('group-dialog-modal');
@@ -2533,85 +1861,110 @@ const App = {
 
   saveGroupModal: function() {
     const name = document.getElementById('group-modal-name').value.trim();
-    if (!name) {
-      this.showToast('กรุณากรอกชื่อกลุ่มเรียน', 'error');
-      return;
-    }
-
-    this.state.groups.push({
-      id: 'grp_' + Date.now(),
-      name: name
-    });
-    this.saveData();
+    if (!name) return;
+    this.state.groups.push({ id: 'grp_' + Date.now(), name });
+    this.saveData(false);
     this.closeGroupModal();
-    this.renderMaster();
-    this.renderQuickRecord();
+    this.render();
     this.showToast(`เพิ่มกลุ่ม "${name}" เรียบร้อย`, 'success');
   },
 
   deleteGroup: function(grpId) {
-    const g = this.state.groups.find(x => x.id === grpId);
-    if (!g) return;
-
-    this.openConfirmModal({
-      title: 'ลบกลุ่มรอบเรียน',
-      message: `คุณต้องการลบกลุ่ม "${g.name}" ใช่หรือไม่?`,
-      confirmText: 'ลบกลุ่ม',
-      confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
-      onConfirm: () => {
-        this.state.groups = this.state.groups.filter(x => x.id !== grpId);
-        this.saveData();
-        this.renderMaster();
-        this.renderQuickRecord();
-        this.showToast('ลบกลุ่มเรียบร้อย', 'info');
-      }
-    });
+    this.state.groups = this.state.groups.filter(g => g.id !== grpId);
+    this.saveData(false);
+    this.render();
+    this.showToast('ลบกลุ่มเรียนแล้ว', 'info');
   },
 
-  // ----------------- TOAST SYSTEM -----------------
+  // ==================== ⚙️ SETTINGS & DATA DRAWER ====================
+  openSettingsDrawer: function() {
+    document.getElementById('bank-acc-name').value = this.state.paymentSettings.accountName || '';
+    document.getElementById('bank-name').value = this.state.paymentSettings.bankName || '';
+    document.getElementById('bank-acc-no').value = this.state.paymentSettings.accountNumber || '';
+    document.getElementById('bank-promptpay').value = this.state.paymentSettings.promptPay || '';
+
+    const modal = document.getElementById('settings-drawer-modal');
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closeSettingsDrawer: function() {
+    const modal = document.getElementById('settings-drawer-modal');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  savePaymentSettings: function() {
+    this.state.paymentSettings = {
+      accountName: document.getElementById('bank-acc-name').value.trim(),
+      bankName: document.getElementById('bank-name').value.trim(),
+      accountNumber: document.getElementById('bank-acc-no').value.trim(),
+      promptPay: document.getElementById('bank-promptpay').value.trim()
+    };
+    this.saveData(false);
+    this.showToast('บันทึกข้อมูลบัญชีรับเงินเรียบร้อย', 'success');
+  },
+
+  exportExcel: function() {
+    if (window.ExportService) {
+      window.ExportService.exportToExcel({
+        transactions: this.state.transactions,
+        students: this.state.students,
+        groups: this.state.groups
+      });
+      this.showToast('ส่งออกไฟล์ Excel (.xlsx) เรียบร้อย', 'success');
+    }
+  },
+
+  exportCSV: function() {
+    if (window.ExportService) {
+      window.ExportService.exportToCSV({
+        transactions: this.state.transactions
+      });
+      this.showToast('ส่งออกไฟล์ CSV สำหรับ Google Sheets เรียบร้อย', 'success');
+    }
+  },
+
+  // Confirm Dialog
+  openConfirmModal: function({ title, message, confirmText, confirmClass, onConfirm }) {
+    document.getElementById('confirm-modal-title').textContent = title || 'ยืนยัน';
+    document.getElementById('confirm-modal-message').textContent = message || '';
+    const btn = document.getElementById('confirm-modal-action-btn');
+    btn.textContent = confirmText || 'ยืนยัน';
+    btn.className = `px-4 py-2 text-xs font-bold rounded-xl shadow-sm ${confirmClass || 'bg-emerald-600 text-white'}`;
+    this.state.confirmCallback = onConfirm;
+    document.getElementById('confirm-dialog-modal').classList.remove('hidden');
+  },
+
+  closeConfirmModal: function() {
+    this.state.confirmCallback = null;
+    document.getElementById('confirm-dialog-modal').classList.add('hidden');
+  },
+
+  executeConfirmModalAction: function() {
+    if (typeof this.state.confirmCallback === 'function') {
+      this.state.confirmCallback();
+    }
+    this.closeConfirmModal();
+  },
+
   showToast: function(message, type = 'info') {
     const toast = document.getElementById('toast');
-    const toastMsg = document.getElementById('toast-msg');
-    const toastIcon = document.getElementById('toast-icon');
-    if (!toast || !toastMsg) return;
-
-    toastMsg.textContent = message;
-    if (type === 'success') {
-      toast.className = 'fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-2xl transition-all transform translate-y-0 opacity-100';
-      if (toastIcon) toastIcon.textContent = '✓';
-    } else if (type === 'error') {
-      toast.className = 'fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 bg-red-600 text-white text-xs font-semibold rounded-xl shadow-2xl transition-all transform translate-y-0 opacity-100';
-      if (toastIcon) toastIcon.textContent = '✕';
-    } else {
-      toast.className = 'fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-3 bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-2xl transition-all transform translate-y-0 opacity-100';
-      if (toastIcon) toastIcon.textContent = 'ℹ';
-    }
-
-    clearTimeout(this._toastTimeout);
-    this._toastTimeout = setTimeout(() => {
-      toast.classList.add('translate-y-12', 'opacity-0');
-    }, 3500);
+    const msgEl = document.getElementById('toast-msg');
+    if (!toast || !msgEl) return;
+    msgEl.textContent = message;
+    toast.className = `fixed bottom-20 md:bottom-6 right-5 z-50 flex items-center gap-2 px-4 py-3 text-xs font-bold rounded-xl shadow-2xl transition-all ${
+      type === 'success'
+        ? 'bg-emerald-500 text-zinc-950'
+        : type === 'error'
+        ? 'bg-red-600 text-white'
+        : 'bg-zinc-800 text-zinc-100 border border-zinc-700'
+    }`;
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      toast.classList.add('opacity-0', 'translate-y-8', 'pointer-events-none');
+    }, 3200);
   },
 
-  // ----------------- EVENT BINDINGS -----------------
   bindEvents: function() {
-    const gradeSelect = document.getElementById('record-grade-select');
-    if (gradeSelect) {
-      gradeSelect.addEventListener('change', (e) => {
-        this.state.recordGrade = e.target.value;
-        this.populateSessionStudents();
-        this.renderQuickRecordList();
-      });
-    }
-
-    const groupSelect = document.getElementById('record-group-select');
-    if (groupSelect) {
-      groupSelect.addEventListener('change', (e) => {
-        this.state.recordGroup = e.target.value;
-        this.state.sessionStudents.forEach(item => item.group = e.target.value);
-      });
-    }
-
     const dateInput = document.getElementById('record-date-input');
     if (dateInput) {
       dateInput.addEventListener('change', (e) => {
@@ -2619,37 +1972,11 @@ const App = {
       });
     }
 
-    const searchInput = document.getElementById('filter-search');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        this.state.filter.search = e.target.value;
-        this.state.page = 1;
-        this.renderTransactions();
-      });
-    }
-
-    ['year', 'month', 'group', 'grade', 'status', 'payment'].forEach(field => {
-      const el = document.getElementById('filter-' + field);
-      if (el) {
-        el.addEventListener('change', (e) => {
-          this.state.filter[field] = e.target.value;
-          this.state.page = 1;
-          this.renderTransactions();
-        });
-      }
-    });
-
-    const exportBtn = document.getElementById('btn-export-excel');
-    if (exportBtn) {
-      exportBtn.addEventListener('click', () => {
-        if (window.ExcelService) {
-          window.ExcelService.exportToExcel({
-            transactions: this.state.transactions,
-            students: this.state.students,
-            groups: this.state.groups
-          });
-          this.showToast('ส่งออกไฟล์ Excel เรียบร้อยแล้ว', 'success');
-        }
+    const grpSelect = document.getElementById('record-group-select');
+    if (grpSelect) {
+      grpSelect.addEventListener('change', (e) => {
+        this.state.recordGroup = e.target.value;
+        this.state.sessionStudents.forEach(s => s.group = e.target.value);
       });
     }
 
@@ -2657,266 +1984,31 @@ const App = {
     if (importInput) {
       importInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
-        if (!file) return;
-        if (window.ExcelService) {
-          window.ExcelService.importFromExcel(file, (err, result) => {
-            if (err) {
-              alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์: ' + err.message);
-              return;
+        if (!file || !window.ExportService) return;
+        window.ExportService.importFromExcel(file, (err, res) => {
+          if (err) {
+            this.showToast('นำเข้าไฟล์ไม่สำเร็จ: ' + err.message, 'error');
+            return;
+          }
+          this.openConfirmModal({
+            title: 'นำเข้าข้อมูลจากไฟล์ Excel',
+            message: `พบรายการสอน ${res.transactions.length} รายการ ต้องการนำเข้าสู่ระบบ v.4 หรือไม่?`,
+            confirmText: 'นำเข้าข้อมูล',
+            confirmClass: 'bg-emerald-600 text-white',
+            onConfirm: () => {
+              this.state.transactions = res.transactions;
+              if (res.students.length > 0) this.state.students = res.students;
+              if (res.groups.length > 0) this.state.groups = res.groups;
+              this.normalizeData();
+              this.saveData(false);
+              this.populateSessionStudents();
+              this.render();
+              this.closeSettingsDrawer();
+              this.showToast(`นำเข้าสำเร็จ ${res.transactions.length} รายการ 🎉`, 'success');
             }
-            this.openConfirmModal({
-              title: 'นำเข้าข้อมูล Excel',
-              message: `พบข้อมูล ${result.transactions.length} รายการ ต้องการนำเข้าข้อมูลเหล่านี้เข้าสู่ระบบหรือไม่?`,
-              confirmText: 'นำเข้าข้อมูล',
-              confirmClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-              onConfirm: () => {
-                this.state.transactions = result.transactions;
-                if (result.students.length > 0) this.state.students = result.students;
-                if (result.groups.length > 0) this.state.groups = result.groups;
-                this.saveData();
-                this.render();
-                this.showToast(`นำเข้าสำเร็จ ${result.transactions.length} รายการ`, 'success');
-              }
-            });
           });
-        }
-      });
-    }
-  },
-
-  renderEditModal: function() {
-    const modal = document.getElementById('edit-tx-modal');
-    if (!modal || !this.state.editingTx) return;
-    const tx = this.state.editingTx;
-
-    document.getElementById('edit-date').value = tx.date;
-    document.getElementById('edit-student').value = tx.studentName;
-    document.getElementById('edit-grade').value = tx.grade || '';
-    document.getElementById('edit-group').value = tx.group || '';
-    document.getElementById('edit-amount').value = tx.amount;
-    document.getElementById('edit-status').value = tx.status;
-    document.getElementById('edit-payment').value = tx.paymentMethod;
-
-    modal.classList.remove('hidden');
-  },
-
-  // ==================== FIREBASE CLOUD SYNC ====================
-  initFirebase: function() {
-    if (window.FirebaseService) {
-      window.FirebaseService.init(
-        (cloudData, isCloudEmpty) => this.handleCloudData(cloudData, isCloudEmpty),
-        (status) => this.handleCloudStatus(status)
-      );
-    }
-  },
-
-  handleCloudStatus: function(status) {
-    const dot = document.getElementById('cloud-status-dot');
-    const text = document.getElementById('cloud-status-text');
-    const modalDot = document.getElementById('modal-cloud-dot');
-    const modalStatus = document.getElementById('modal-cloud-status');
-    const modalTime = document.getElementById('modal-cloud-time');
-    const modalCounts = document.getElementById('modal-cloud-counts');
-
-    const isConnected = status && status.connected;
-    const colorClass = isConnected ? 'bg-emerald-500' : 'bg-amber-500';
-    const statusMsg = isConnected ? 'คลาวด์ออนไลน์' : 'ออฟไลน์';
-
-    if (dot) {
-      dot.className = `w-2.5 h-2.5 rounded-full ${colorClass} ${isConnected ? 'animate-pulse' : ''}`;
-    }
-    if (text) {
-      text.textContent = statusMsg;
-    }
-    if (modalDot) {
-      modalDot.className = `w-2.5 h-2.5 rounded-full ${colorClass}`;
-    }
-    if (modalStatus) {
-      modalStatus.textContent = isConnected ? 'เชื่อมต่อ Google Firebase สำเร็จ (ซิงค์เรียลไทม์)' : (status.message || 'ออฟไลน์ (บันทึกลงเครื่อง)');
-      modalStatus.className = isConnected ? 'font-bold text-emerald-700' : 'font-bold text-amber-700';
-    }
-    if (modalTime) {
-      const timeVal = (status && status.lastCloudUpdate) || (window.FirebaseService && window.FirebaseService.lastCloudUpdate);
-      if (timeVal) {
-        try {
-          const d = new Date(timeVal);
-          modalTime.textContent = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        } catch (e) {
-          modalTime.textContent = timeVal;
-        }
-      } else {
-        modalTime.textContent = 'ยังไม่มีประวัติซิงค์';
-      }
-    }
-    if (modalCounts) {
-      modalCounts.textContent = `${this.state.transactions.length} รายการ / ${this.state.students.length} นักเรียน / ${this.state.groups.length} กลุ่ม`;
-    }
-  },
-
-  handleCloudData: function(cloudData, isCloudEmpty) {
-    if (isCloudEmpty) {
-      // Firebase cloud is completely empty, initialize it with current local dataset
-      console.log('Firebase cloud is empty. Initializing with local data...');
-      this.syncToCloud(true);
-      return;
-    }
-
-    if (!cloudData) return;
-
-    // Check if cloud data has transactions
-    if (cloudData.transactions && Array.isArray(cloudData.transactions)) {
-      // Normalize transactions
-      cloudData.transactions.forEach(t => {
-        if (t && t.status === 'ค้างชำระ') t.status = 'ค้างจ่าย';
-        if (t && t.id === 'tx_181' && t.status === 'จ่ายแล้ว' && t.paymentMethod === '-') t.status = 'ค้างจ่าย';
-      });
-
-      this.state.transactions = cloudData.transactions;
-      if (cloudData.students && Array.isArray(cloudData.students)) {
-        this.state.students = cloudData.students;
-      }
-      if (cloudData.groups && Array.isArray(cloudData.groups)) {
-        this.state.groups = cloudData.groups;
-      }
-      if (cloudData.paymentSettings) {
-        this.state.paymentSettings = Object.assign(this.state.paymentSettings, cloudData.paymentSettings);
-      }
-
-      // Save to localStorage as offline cache
-      const payload = {
-        transactions: this.state.transactions,
-        students: this.state.students,
-        groups: this.state.groups,
-        paymentSettings: this.state.paymentSettings,
-        lastUpdated: cloudData.lastUpdated || new Date().toISOString()
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      localStorage.setItem(STORAGE_KEY + '_last_sync', payload.lastUpdated);
-
-      this.populateSessionStudents();
-      this.render();
-      this.updateUnpaidBadge();
-      this.handleCloudStatus({ connected: true, lastCloudUpdate: cloudData.lastUpdated });
-    }
-  },
-
-  syncToCloud: function(silent = false) {
-    if (!window.FirebaseService || !window.FirebaseService.db) {
-      if (!silent) this.showToast('Firebase ยังไม่พร้อมใช้งาน', 'error');
-      return;
-    }
-    const payload = {
-      transactions: this.state.transactions,
-      students: this.state.students,
-      groups: this.state.groups,
-      paymentSettings: this.state.paymentSettings,
-      lastUpdated: new Date().toISOString()
-    };
-    window.FirebaseService.saveData(payload).then(success => {
-      if (success) {
-        localStorage.setItem(STORAGE_KEY + '_last_sync', payload.lastUpdated);
-        this.handleCloudStatus({ connected: true, lastCloudUpdate: payload.lastUpdated });
-        if (!silent) {
-          this.showToast('ซิงค์ข้อมูลขึ้น Google Firebase เรียบร้อยแล้ว ☁️', 'success');
-        }
-      } else {
-        if (!silent) {
-          this.showToast('ไม่สามารถซิงค์ขึ้นคลาวด์ได้ โปรดตรวจ Firebase Rules', 'error');
-        }
-      }
-    });
-  },
-
-  showCloudStatusModal: function() {
-    const modal = document.getElementById('cloud-status-modal');
-    if (modal) modal.classList.remove('hidden');
-    this.handleCloudStatus({
-      connected: window.FirebaseService ? window.FirebaseService.isConnectedToCloud : false,
-      lastCloudUpdate: window.FirebaseService ? window.FirebaseService.lastCloudUpdate : null
-    });
-  },
-
-  closeCloudStatusModal: function() {
-    const modal = document.getElementById('cloud-status-modal');
-    if (modal) modal.classList.add('hidden');
-  },
-
-  forcePushToCloud: function() {
-    this.syncToCloud(false);
-    this.closeCloudStatusModal();
-  },
-
-  showPwaInstallModal: function() {
-    const modal = document.getElementById('pwa-install-modal');
-    if (modal) modal.classList.remove('hidden');
-  },
-
-  closePwaInstallModal: function() {
-    const modal = document.getElementById('pwa-install-modal');
-    if (modal) modal.classList.add('hidden');
-  },
-
-  // ----------------- 🌙 THEME MANAGEMENT (MIDNIGHT OLED) -----------------
-  initTheme: function() {
-    const saved = localStorage.getItem('money_plus_theme');
-    if (saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    this.updateThemeUI();
-  },
-
-  toggleTheme: function() {
-    const isDark = document.documentElement.classList.toggle('dark');
-    localStorage.setItem('money_plus_theme', isDark ? 'dark' : 'light');
-    this.updateThemeUI();
-    if (this.charts && this.charts.trend) {
-      this.renderCharts();
-    }
-    this.showToast(isDark ? 'เปิดใช้งาน Dark Mode 🌙 (Midnight OLED)' : 'สลับเป็น Light Mode ☀️ เรียบร้อย', 'info');
-  },
-
-  updateThemeUI: function() {
-    const isDark = document.documentElement.classList.contains('dark');
-    const icon = document.getElementById('theme-toggle-icon');
-    if (icon) {
-      icon.textContent = isDark ? '☀️' : '🌙';
-    }
-    const btn = document.getElementById('theme-toggle-btn');
-    if (btn) {
-      btn.title = isDark ? 'คลิกเพื่อสลับเป็นโหมดสว่าง (Light Mode)' : 'คลิกเพื่อสลับเป็นโหมดมืด (Dark Mode)';
-      if (isDark) {
-        btn.classList.add('text-amber-400', 'bg-zinc-800', 'border-zinc-700');
-        btn.classList.remove('text-slate-700', 'bg-slate-100', 'border-slate-200');
-      } else {
-        btn.classList.remove('text-amber-400', 'bg-zinc-800', 'border-zinc-700');
-        btn.classList.add('text-slate-700', 'bg-slate-100', 'border-slate-200');
-      }
-    }
-    const metaTheme = document.querySelector('meta[name="theme-color"]');
-    if (metaTheme) {
-      metaTheme.setAttribute('content', isDark ? '#09090b' : '#059669');
-    }
-  },
-
-  forceRefreshApp: function() {
-    this.showToast('กำลังล้างแคชและโหลดเวอร์ชันล่าสุด...', 'info');
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(registrations => {
-        for (let reg of registrations) {
-          reg.unregister();
-        }
-      });
-    }
-    if ('caches' in window) {
-      caches.keys().then(names => {
-        Promise.all(names.map(name => caches.delete(name))).then(() => {
-          window.location.reload(true);
         });
       });
-    } else {
-      window.location.reload(true);
     }
   }
 };

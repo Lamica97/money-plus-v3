@@ -26,7 +26,7 @@ window.INITIAL_DATA = {
       "name": "วันอังคาร"
     }
   ],
-  "lastUpdated": "2026-11-19T12:08:14.412Z",
+  "lastUpdated": "2026-11-23T12:07:05.767Z",
   "paymentSettings": {
     "accountName": "ครูผู้สอน (Money Plus)",
     "accountNumber": "123-4-56789-0",
@@ -197,6 +197,104 @@ window.INITIAL_DATA = {
     }
   ],
   "transactions": [
+    {
+      "amount": 200,
+      "date": "2026-11-23",
+      "firebaseId": "local_0ya3l45xd",
+      "grade": "ม.4",
+      "group": "วันจันทร์",
+      "id": "tx_1795435625766_0",
+      "month": "พ.ย.",
+      "paymentMethod": "-",
+      "seq": 490,
+      "status": "ค้างจ่าย",
+      "studentName": "ปลื้ม",
+      "year": "2026"
+    },
+    {
+      "amount": 200,
+      "date": "2026-11-23",
+      "firebaseId": "local_mcs3hl2oj",
+      "grade": "ม.4",
+      "group": "วันจันทร์",
+      "id": "tx_1795435625766_1",
+      "month": "พ.ย.",
+      "paymentMethod": "-",
+      "seq": 491,
+      "status": "ค้างจ่าย",
+      "studentName": "พี",
+      "year": "2026"
+    },
+    {
+      "amount": 200,
+      "date": "2026-11-23",
+      "firebaseId": "local_yfbc4vq0r",
+      "grade": "ม.4",
+      "group": "วันจันทร์",
+      "id": "tx_1795435625766_2",
+      "month": "พ.ย.",
+      "paymentMethod": "-",
+      "seq": 492,
+      "status": "ค้างจ่าย",
+      "studentName": "อุ้ย",
+      "year": "2026"
+    },
+    {
+      "amount": 200,
+      "date": "2026-11-23",
+      "firebaseId": "local_ujb8is283",
+      "grade": "ม.4",
+      "group": "วันจันทร์",
+      "id": "tx_1795435625766_3",
+      "month": "พ.ย.",
+      "paymentMethod": "-",
+      "seq": 493,
+      "status": "ค้างจ่าย",
+      "studentName": "โชกุน",
+      "year": "2026"
+    },
+    {
+      "amount": 200,
+      "date": "2026-11-23",
+      "firebaseId": "local_qfnk8i2gg",
+      "grade": "ม.4",
+      "group": "วันจันทร์",
+      "id": "tx_1795435625766_4",
+      "month": "พ.ย.",
+      "paymentMethod": "-",
+      "seq": 494,
+      "status": "ค้างจ่าย",
+      "studentName": "ปลื้ม 2",
+      "year": "2026"
+    },
+    {
+      "amount": 500,
+      "date": "2026-11-22",
+      "firebaseId": "local_uxd953fjf",
+      "grade": "ม.5",
+      "group": "วันอาทิตย์",
+      "id": "tx_1795367246039_0",
+      "month": "พ.ย.",
+      "paymentMethod": "เงินสด",
+      "seq": 489,
+      "status": "จ่ายแล้ว",
+      "studentName": "ทริกเกอร์",
+      "year": "2026"
+    },
+    {
+      "amount": 200,
+      "date": "2026-11-22",
+      "firebaseId": "local_77p97he6i",
+      "grade": "ม.4",
+      "group": "วันอาทิตย์",
+      "id": "tx_1795367218024_0",
+      "month": "พ.ย.",
+      "paymentMethod": "-",
+      "seq": 488,
+      "status": "ค้างจ่าย",
+      "studentName": "อิ้ง",
+      "year": "2026"
+    },
     {
       "amount": 200,
       "date": "2026-11-19",

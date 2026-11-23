@@ -1,5 +1,5 @@
-// Money Plus v.3 - Firebase Realtime Database Service
-// Handles real-time cloud synchronization, connection status, and offline caching
+// Money Plus v.4 - Firebase Realtime Database Service
+// Connected directly to money_plus_v3 node for 100% Real-Time 2-Way Sync between v.3 and v.4!
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCUUhACcQ-eZq_yWRPxx_nwH8MgTLbB8XM",
@@ -12,10 +12,12 @@ const FIREBASE_CONFIG = {
   measurementId: "G-Q2Y1ME9252"
 };
 
+const DB_NODE_V4 = 'money_plus_v3';
+const DB_NODE_V3 = 'money_plus_v3';
+
 const FirebaseService = {
   db: null,
   app: null,
-  isOnline: false,
   isConnectedToCloud: false,
   lastCloudUpdate: null,
   isSyncing: false,
@@ -29,7 +31,7 @@ const FirebaseService = {
 
     if (typeof firebase === 'undefined') {
       console.warn('Firebase SDK not loaded, working in LocalStorage offline mode');
-      this.updateStatus(false, 'SDK ไม่พร้อมใช้งาน (ทำงานแบบออฟไลน์)');
+      this.updateStatus(false, 'โหมดออฟไลน์ (ไม่มี SDK)');
       return false;
     }
 
@@ -41,20 +43,18 @@ const FirebaseService = {
       }
 
       this.db = firebase.database();
-      
-      // Monitor connection status via .info/connected
+
       this.db.ref('.info/connected').on('value', (snap) => {
         const connected = snap.val() === true;
         this.isConnectedToCloud = connected;
-        this.updateStatus(connected, connected ? 'เชื่อมต่อคลาวด์แล้ว (Realtime Sync)' : 'ออฟไลน์ (บันทึกลงเครื่อง)');
+        this.updateStatus(connected, connected ? 'ออนไลน์ (Realtime v.4)' : 'ออฟไลน์ (บันทึกในเครื่อง)');
       });
 
-      // Listen for data updates on money_plus_v3 root
       this.listenToCloudData();
       return true;
     } catch (err) {
-      console.error('Firebase initialization error:', err);
-      this.updateStatus(false, 'เชื่อมต่อไม่สำเร็จ: ' + (err.message || 'Error'));
+      console.error('Firebase init error:', err);
+      this.updateStatus(false, 'เชื่อมต่อไม่สำเร็จ');
       return false;
     }
   },
@@ -73,16 +73,25 @@ const FirebaseService = {
   listenToCloudData: function() {
     if (!this.db) return;
 
-    const dataRef = this.db.ref('money_plus_v3');
-    dataRef.on('value', (snapshot) => {
+    const dataRef = this.db.ref(DB_NODE_V4);
+    dataRef.on('value', async (snapshot) => {
       const data = snapshot.val();
       this.isInitialLoadDone = true;
 
       if (!data) {
-        // Cloud has no data yet, signal to app to push initial data
-        console.log('Firebase cloud is empty. Ready for initial upload.');
+        console.log('[v.4] money_plus_v4 node is empty. Auto-cloning initial data from money_plus_v3...');
+        try {
+          const v3Snap = await this.db.ref(DB_NODE_V3).once('value');
+          const v3Data = v3Snap.val();
+          if (v3Data && v3Data.transactions) {
+            await this.saveData(v3Data);
+            return;
+          }
+        } catch (e) {
+          console.warn('[v.4] Could not read money_plus_v3, falling back to local dataset', e);
+        }
         if (this.onDataChangeCallback) {
-          this.onDataChangeCallback(null, true); // (data, isCloudEmpty)
+          this.onDataChangeCallback(null, true);
         }
         return;
       }
@@ -92,16 +101,13 @@ const FirebaseService = {
         this.onDataChangeCallback(data, false);
       }
     }, (error) => {
-      console.error('Firebase read error (check Rules):', error);
-      this.updateStatus(false, 'อ่านข้อมูลไม่สำเร็จ (ตรวจ Rules ใน Firebase)');
+      console.error('Firebase v4 read error:', error);
+      this.updateStatus(false, 'อ่านคลาวด์ไม่สำเร็จ (ตรวจ Rules)');
     });
   },
 
   saveData: async function(payload) {
-    if (!this.db) {
-      console.warn('Firebase DB not initialized, skipping cloud save');
-      return false;
-    }
+    if (!this.db) return false;
 
     try {
       this.isSyncing = true;
@@ -113,29 +119,29 @@ const FirebaseService = {
         lastUpdated: payload.lastUpdated || new Date().toISOString()
       };
 
-      await this.db.ref('money_plus_v3').set(cleanPayload);
+      await this.db.ref(DB_NODE_V4).set(cleanPayload);
       this.lastCloudUpdate = cleanPayload.lastUpdated;
       this.isSyncing = false;
-      this.updateStatus(true, 'ซิงค์ข้อมูลกับคลาวด์เรียบร้อยแล้ว');
+      this.updateStatus(true, 'ซิงค์คลาวด์ v.4 เรียบร้อย');
       return true;
     } catch (err) {
       this.isSyncing = false;
-      console.error('Firebase save error:', err);
-      this.updateStatus(false, 'บันทึกลงคลาวด์ไม่สำเร็จ: ' + (err.message || 'Error'));
+      console.error('Firebase v4 save error:', err);
+      this.updateStatus(false, 'ซิงค์ไม่สำเร็จ');
       return false;
     }
   },
 
-  manualSyncToCloud: async function(payload) {
-    return await this.saveData(payload);
-  },
-
-  manualFetchFromCloud: async function() {
+  pullFromV3Cloud: async function() {
     if (!this.db) return null;
-    const snap = await this.db.ref('money_plus_v3').once('value');
-    return snap.val();
+    try {
+      const snap = await this.db.ref(DB_NODE_V3).once('value');
+      return snap.val();
+    } catch (err) {
+      console.error('Error pulling from v3:', err);
+      return null;
+    }
   }
 };
 
-// Expose globally
 window.FirebaseService = FirebaseService;
