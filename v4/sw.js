@@ -1,5 +1,5 @@
 // Money Plus v.4 - Service Worker (PWA & Offline Support)
-const CACHE_NAME = 'money-plus-v4-cache-v5';
+const CACHE_NAME = 'money-plus-v4-main-v2';
 
 const STATIC_ASSETS = [
   './',
@@ -36,7 +36,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key.startsWith('money-plus-v4-') && key !== CACHE_NAME) {
+          if (key !== CACHE_NAME) {
             return caches.delete(key);
           }
         })

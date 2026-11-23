@@ -241,14 +241,14 @@ const App = {
     const drawerStatus = document.getElementById('drawer-cloud-status');
 
     if (dot) {
-      dot.className = `w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`;
+      dot.className = `w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`;
     }
     if (text) {
-      text.textContent = isConnected ? 'ซิงก์ v.3 + v.4' : 'ออฟไลน์';
+      text.textContent = isConnected ? 'ออนไลน์' : 'ออฟไลน์';
     }
     if (drawerStatus) {
       drawerStatus.textContent = isConnected
-        ? `ซิงก์ฐานข้อมูลเดียวกับ v.3 แบบเรียลไทม์ (${this.state.transactions.length} รายการ)`
+        ? `เชื่อมต่อ Firebase Cloud เรียบร้อย (${this.state.transactions.length} รายการ)`
         : 'โหมดออฟไลน์ (บันทึกในเครื่อง)';
     }
   },

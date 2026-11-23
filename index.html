@@ -49,9 +49,9 @@
         </div>
 
         <!-- Compact Cloud Status Pill -->
-        <button onclick="App.openSettingsDrawer()" class="ml-1 px-2 py-1 rounded-full surface-elevated flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-zinc-400 hover:border-emerald-500/40 transition" title="สถานะการซิงค์คลาวด์ v.4">
-          <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span id="cloud-status-text" class="hidden sm:inline">Cloud v.4</span>
+        <button onclick="App.openSettingsDrawer()" class="ml-1 px-2.5 py-1 rounded-full surface-elevated flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-zinc-400 hover:border-emerald-500/40 transition whitespace-nowrap flex-shrink-0" title="สถานะการซิงค์คลาวด์">
+          <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></span>
+          <span id="cloud-status-text" class="hidden sm:inline whitespace-nowrap">ออนไลน์</span>
         </button>
       </div>
 
@@ -582,12 +582,12 @@
           <button onclick="App.closeSettingsDrawer()" class="w-8 h-8 rounded-full surface-elevated flex items-center justify-center">✕</button>
         </div>
 
-        <!-- Section 1: Sync from v.3 -->
+        <!-- Section 1: Cloud Sync -->
         <div class="surface-elevated p-3.5 rounded-xl space-y-2 border-emerald-500/30">
-          <div class="text-xs font-bold text-emerald-400">🔄 ซิงค์ข้อมูลจากระบบเดิม (Money Plus v.3)</div>
-          <p class="text-[11px] text-slate-400">ดึงข้อมูลรายการเรียนและรายชื่อนักเรียนล่าสุดจาก v.3 มาอัปเดตเข้า v.4 โดยไม่กระทบข้อมูลใน v.3</p>
-          <button type="button" onclick="App.pullFromV3()" class="w-full py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-extrabold transition">
-            🔄 ดึงข้อมูลล่าสุดจาก v.3 เดี๋ยวนี้
+          <div class="text-xs font-bold text-emerald-400">☁️ ระบบซิงก์ข้อมูลคลาวด์ (Firebase Realtime)</div>
+          <p class="text-[11px] text-slate-400">ข้อมูลทั้งหมดถูกซิงก์อัตโนมัติแบบเรียลไทม์ระหว่าง iPad, มือถือ และคอมพิวเตอร์</p>
+          <button type="button" onclick="App.saveData(false); App.showToast('ซิงก์ข้อมูลล่าสุดขึ้น Firebase Cloud เรียบร้อย ☁️', 'success')" class="w-full py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-extrabold transition">
+            ☁️ บังคับซิงก์ข้อมูลขึ้นคลาวด์เดี๋ยวนี้
           </button>
         </div>
 
@@ -637,8 +637,8 @@
       </div>
 
       <div class="pt-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-[11px] text-slate-400">
-        <span>Money Plus v.4 (Midnight OLED)</span>
-        <a href="./v3-legacy/index.html" class="text-emerald-400 hover:underline">↩ ดูหน้า v.3 เดิม (Archive)</a>
+        <span>Money Plus v.4 (Midnight OLED Edition)</span>
+        <span class="text-emerald-400 font-semibold">● Realtime Cloud Active</span>
       </div>
     </div>
   </div>
@@ -886,15 +886,15 @@
   <!-- Scripts -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-  <script src="./src/data/initialData.js?v=20261123_v7"></script>
-  <script src="./src/js/firebase.js?v=20261123_v7"></script>
-  <script src="./src/js/export.js?v=20261123_v7"></script>
-  <script src="./src/js/slip.js?v=20261123_v7"></script>
-  <script src="./src/js/app.js?v=20261123_v7"></script>
+  <script src="./src/data/initialData.js?v=20261123_v9"></script>
+  <script src="./src/js/firebase.js?v=20261123_v9"></script>
+  <script src="./src/js/export.js?v=20261123_v9"></script>
+  <script src="./src/js/slip.js?v=20261123_v9"></script>
+  <script src="./src/js/app.js?v=20261123_v9"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261123_v7').then(reg => {
+        navigator.serviceWorker.register('./sw.js?v=20261123_v9').then(reg => {
           try { reg.update(); } catch (e) {}
         }).catch(() => {});
       });
