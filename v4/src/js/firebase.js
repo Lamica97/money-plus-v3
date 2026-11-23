@@ -1,5 +1,5 @@
-// Money Plus v.4 - Firebase Realtime Database Service (Isolated Node: money_plus_v4)
-// Supports 1-click Live Migration / Pull from money_plus_v3 without affecting v.3
+// Money Plus v.4 - Firebase Realtime Database Service
+// Connected directly to money_plus_v3 node for 100% Real-Time 2-Way Sync between v.3 and v.4!
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCUUhACcQ-eZq_yWRPxx_nwH8MgTLbB8XM",
@@ -12,7 +12,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-Q2Y1ME9252"
 };
 
-const DB_NODE_V4 = 'money_plus_v4';
+const DB_NODE_V4 = 'money_plus_v3';
 const DB_NODE_V3 = 'money_plus_v3';
 
 const FirebaseService = {

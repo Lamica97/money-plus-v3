@@ -1,5 +1,5 @@
 // Money Plus v.4 - Service Worker (PWA & Offline Support)
-const CACHE_NAME = 'money-plus-v4-cache-v3';
+const CACHE_NAME = 'money-plus-v4-cache-v4';
 
 const STATIC_ASSETS = [
   './',

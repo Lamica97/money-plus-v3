@@ -1,5 +1,5 @@
-// Money Plus v.4 - Core Application Controller (Clean, Modular, Progressive Disclosure UI)
-const STORAGE_KEY_V4 = 'money_plus_v4_data';
+// Money Plus v.4 - Core Application Controller (100% Real-Time Sync with v.3 Database)
+const STORAGE_KEY_V4 = 'money_plus_v3_data';
 const THEME_KEY_V4 = 'money_plus_v4_theme';
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 const THAI_MONTHS_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
@@ -244,11 +244,11 @@ const App = {
       dot.className = `w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`;
     }
     if (text) {
-      text.textContent = isConnected ? 'Cloud v.4' : 'ออฟไลน์';
+      text.textContent = isConnected ? 'ซิงก์ v.3 + v.4' : 'ออฟไลน์';
     }
     if (drawerStatus) {
       drawerStatus.textContent = isConnected
-        ? `เชื่อมต่อคลาวด์ v.4 แล้ว (${this.state.transactions.length} รายการ)`
+        ? `ซิงก์ฐานข้อมูลเดียวกับ v.3 แบบเรียลไทม์ (${this.state.transactions.length} รายการ)`
         : 'โหมดออฟไลน์ (บันทึกในเครื่อง)';
     }
   },
@@ -260,29 +260,15 @@ const App = {
     }
     if (!cloudData || !Array.isArray(cloudData.transactions)) return;
 
-    // Smart Merge Protection: Preserve any local_ transactions not yet in cloudData
-    const cloudTxList = cloudData.transactions;
-    const cloudIds = new Set(cloudTxList.map(t => t.firebaseId || t.id));
-    const unsyncedLocals = this.state.transactions.filter(t => {
-      const key = t.firebaseId || t.id;
-      return key && String(key).startsWith('local_') && !cloudIds.has(key);
-    });
-
-    if (unsyncedLocals.length > 0 && cloudTxList.length < this.state.transactions.length) {
-      console.log(`[Smart Sync] Merging ${unsyncedLocals.length} local transactions into cloud data`);
-      this.state.transactions = [...unsyncedLocals, ...cloudTxList];
-      this.normalizeData();
-      this.saveData(false);
-    } else {
-      this.state.transactions = cloudTxList;
-      if (Array.isArray(cloudData.students)) this.state.students = cloudData.students;
-      if (Array.isArray(cloudData.groups)) this.state.groups = cloudData.groups;
-      if (cloudData.paymentSettings) {
-        this.state.paymentSettings = Object.assign(this.state.paymentSettings, cloudData.paymentSettings);
-      }
-      this.normalizeData();
-      this.saveData(true);
+    this.state.transactions = cloudData.transactions;
+    if (Array.isArray(cloudData.students)) this.state.students = cloudData.students;
+    if (Array.isArray(cloudData.groups)) this.state.groups = cloudData.groups;
+    if (cloudData.paymentSettings) {
+      this.state.paymentSettings = Object.assign(this.state.paymentSettings, cloudData.paymentSettings);
     }
+    this.normalizeData();
+    localStorage.removeItem('money_plus_v4_data');
+    this.saveData(true);
 
     this.populateSessionStudents();
     this.render();
